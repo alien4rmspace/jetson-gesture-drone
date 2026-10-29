@@ -1,179 +1,108 @@
-# Optimizing real-time AI on Jetson Orin Nano
+# Gesture-controlled camera drone on a Jetson Orin Nano
 
-I profiled and optimized a live camera, computer-vision, and local-LLM stack on an NVIDIA Jetson Orin Nano. Moving YOLOv8n inference from CPU to TensorRT FP16 raised the measured camera stream from **8.5 to 30.0 FPS** (the camera's 30 FPS limit). Later work moved detection and pose into DeepStream, reduced browser-frame CPU work, and isolated local Qwen inference from the video process.
+I'm building a drone that flies by hand gesture, locks onto its pilot, and keeps them framed with its pan-tilt-zoom camera. Detection, tracking, gesture recognition, camera control and flight commands all run on board, on a Jetson Orin Nano connected to a Pixhawk 6C flight controller running ArduCopter.
 
-This repository is my engineering portfolio: the results and decisions are here in the README; the linked notes preserve the measurements and failure investigations behind them.
-
-## Image of parts used to create the drone
-
-<img width="487" height="275" alt="image" src="https://github.com/user-attachments/assets/5c6273e2-32c8-41bb-ae67-dcec354ec745" />
-
-
-## Video of drone in action
-
-
+I wrote the software and fly the test flights. The application repository is private; this repository holds the write-ups, measurements and clips. Since May 2026 the application has grown to 254 commits and about 1,400 automated tests.
 
 https://github.com/user-attachments/assets/c954f707-9052-458e-8af9-3767928d823a
 
+## What it does
 
+All clips are from flights on 2026-10-28, with the stream's overlays: the top banner shows the current command and the speed sent to the drone, and the bottom-left label shows the person lock.
 
-## Measured results
+<table>
+<tr>
+<td width="50%"><img src="assets/clips/gesture-forward.webp" alt="The pilot raises both hands; the banner shows Move forward at 1 m/s and the drone flies toward them."><br><b>Gesture flight.</b> Both hands up: Move forward at 1 m/s, and the drone flies toward the pilot.</td>
+<td width="50%"><img src="assets/clips/gesture-up-down.webp" alt="The pilot raises one hand, then the other; the banner switches between Move down and Move up and the drone's shadow moves on the sidewalk."><br><b>Up and down.</b> Left hand up moves the drone down, right hand up moves it up. Its shadow is on the sidewalk.</td>
+</tr>
+<tr>
+<td width="50%"><img src="assets/clips/follow.webp" alt="The pilot walks away along a sidewalk; the drone follows at about 1 m/s and turns to keep them centred."><br><b>Follow mode.</b> The pilot walks away; the drone keeps its distance and turns to keep them centred.</td>
+<td width="50%"><img src="assets/clips/person-lock.webp" alt="The pilot walks toward the drone with their skeleton tracked and the lock label reading locked."><br><b>Person lock and pose.</b> The lock and the 17-point skeleton stay on the pilot as they walk toward the drone, which backs away.</td>
+</tr>
+<tr>
+<td width="50%"><img src="assets/clips/auto-tilt.webp" alt="After takeoff the camera points at the sky, finds the pilot and tilts down to keep them centred."><br><b>Auto tilt.</b> On takeoff the camera starts on the sky, finds the pilot and tilts to keep them centred.</td>
+<td width="50%"><img src="assets/clips/auto-zoom.webp" alt="The zoom value falls from 1176 to about 470 while the pilot stays the same size and sharp."><br><b>Auto zoom.</b> The lens zooms in (raw zoom 1176 to about 470; lower is closer) and the focus map keeps the pilot sharp.</td>
+</tr>
+</table>
 
-| Problem | Change I made | Observed result |
+- **Locks onto the pilot.** It picks a person whose whole body is in view and whose eyes are both visible, then stays on that person's tracker ID. Every update is checked against the person's appearance (ReID embeddings), so the lock stays on the pilot instead of jumping to someone else.
+- **Takes gestures as flight commands.** Two closed fists enter Movement mode. Hand and arm gestures then move the drone forward, back, left, right, up and down; two open palms or crossed arms stop it. Only the locked person's gestures count, and a move only starts while both of their eyes are visible, so a person facing away can't start one.
+- **Follow mode.** Two thumbs up start follow mode. The drone flies forward or backward to keep the pilot at the distance they were when it started, while auto yaw turns to keep them centred.
+- **Keeps the pilot framed.** The tilt servo keeps the pilot vertically centred and turns against the drone's pitch like a gimbal. Auto zoom keeps the pilot at a set size in the frame, and a measured zoom-to-focus map keeps the image sharp.
+- **Voice commands (optional).** Spoken or typed commands go to a local Qwen model running under `llama.cpp` on the GPU, which turns them into the same commands as gestures. Piper speaks the replies.
+- **Browser control.** A web page shows the live annotated stream, switches stream profiles, and plays back recordings with the overlays.
+
+**Safety.** Gesture and voice commands go through one command router. Movement is only sent while a recent Pixhawk heartbeat reports GUIDED mode and the drone is armed; switching the flight mode on the radio ends gesture control at once. Motion output can also be switched off with a stream profile.
+
+## How it works
+
+```text
+Arducam 12 MP pan-tilt-zoom camera (CSI)
+  -> Argus / GStreamer -> DeepStream
+       YOLO26s-pose, TensorRT FP16: people + 17 body keypoints in one pass
+       NvDCF tracker + ReID embeddings: persistent IDs
+  -> person lock -> gestures: body pose + MediaPipe hands (separate process)
+  -> command router  <- voice: local Qwen (separate process)
+  -> MAVLink, GUIDED only -> Pixhawk 6C / ArduCopter 4.6
+  -> camera controller over I2C: tilt, zoom, focus
+  -> browser MJPEG stream, recordings with overlays
+```
+
+Work that can block or crash runs in its own process: MediaPipe, recording, the voice model and speech. A supervisor restarts the video process if frames stop arriving. The pipeline holds the camera's 30 FPS in flight.
+
+| Part | What it is |
+| --- | --- |
+| Computer | NVIDIA Jetson Orin Nano developer kit (8 GB) |
+| Flight controller | Pixhawk 6C, ArduCopter 4.6.3 |
+| Camera | Arducam 12MP 477P pan-tilt-zoom camera over CSI; tilt servo, zoom and focus motors share one I2C controller |
+| Software | Python, DeepStream 7.1, TensorRT, GStreamer, NvDCF tracker, MediaPipe, MAVLink (pymavlink), `llama.cpp`, Piper |
+
+<img width="487" height="275" alt="Parts used to build the drone" src="https://github.com/user-attachments/assets/5c6273e2-32c8-41bb-ae67-dcec354ec745" />
+
+## Engineering highlights
+
+Each of these started from a flight recording or a measurement, and most were checked in simulation or on the bench before flying.
+
+### Keeping the camera on the pilot
+
+- **Tilt that lagged, then hunted.** The image showed a tilt move a quarter to half a second after it was sent, so a faster controller kept correcting an error it had already fixed and swung back and forth. I measured the loop delay from per-frame timestamps and tilt writes, built a closed-loop simulation around the real controller, and added a Smith predictor: each frame, the controller subtracts the tilt it has commanded but the image can't show yet. That let the tilt run twice as fast without hunting; in four flights the pilot was more than 0.15 of the frame off centre in 1.3–3.4% of frames, against 5.3% before. [Camera tilt loop note](notes/camera-tilt-loop.md)
+- **A camera controller that drops commands.** In one recording the camera reacted late to a fast backward move. I wrote a bench probe and found the camera's I2C controller ignores tilt writes while the zoom or focus motor is moving. The tilt now gets the controller between zoom steps, and zoom holds while the drone pitches fast. (Built and bench-tested; not flown yet.)
+- **The right person, every frame.** I compared the lock's colour histogram with ReID embeddings on the MOT17 tracking dataset's ground truth: ReID picked the right person 96% of the time against 72%, so the lock now uses ReID. When a 0.1 s lock dropout cancelled Movement mode in flight, I traced it to the tracker keeping the pilot's ID on a weaker duplicate box, below the detector's score floor, and gave the locked ID its own lower floor.
+
+### Flying from what the camera sees
+
+- **Follow mode that kept up.** The first follow controller reacted late and moved at one fixed speed, so a walking pilot got up to twice as far away. From the recording and the Pixhawk log I measured how the drone responds to speed commands (0.2 s delay, 0.4 s lag), put that into a follow simulation, and replaced it with a proportional controller with a speed ramp. The flights after that showed backing away is still limited by how fast it reacts, not by the ramp, so the next step is feed-forward from the pilot's own speed.
+- **Turning toward the pilot.** Turn-rate commands showed up in the image 0.6–0.8 s later, so auto yaw overshot. Auto yaw now aims at an absolute heading, worked out from the drone's heading at the moment the frame was captured, so a late frame doesn't add more turn.
+- **Tuning the airframe.** I ran ArduPilot AutoTune on yaw, roll and pitch, and wrote tools to download Pixhawk logs over MAVLink (refused while armed) and review flights for vibration, battery and control response. When the drone turned 60 degrees by itself in one flight, the log showed the heading estimate had moved against the gyros after a takeoff on a magnetically disturbed spot.
+
+### Making it fast and reliable
+
+- **One model pass instead of two.** The stream found people with a segmentation model, then ran a pose model on each person. The pose model already outputs each person's box, so I made it the only detector: **38.6 → 58.7 FPS** on a fixed replay clip, with the same people found and the lock held as well. In later flights, a frame reached the tilt decision in 35–43 ms instead of 202 ms. [Note](notes/pose-model-person-detector.md)
+- **From 8.5 to 30 FPS.** Moving YOLO inference from the CPU to a TensorRT FP16 engine took the first camera stream from 8.5 to the camera's 30 FPS limit. Later work moved detection into DeepStream and cut per-frame CPU work with Nsight Systems: RGB frames end to end, shared memory instead of JPEG for the hand worker, and one direct GPU-to-NumPy copy (callback p95 19.1 → 13.4 ms).
+- **A crash that wasn't the model.** The video pipeline crashed at random. I matched DeepStream buffer-copy failures to kernel GPU memory faults and CUDA error 700, ruled out the TensorRT engines by rebuilding them, and stopped it by moving the affected copies to the Jetson's VIC hardware (`copy-hw=2`) on that JetPack release.
+- **Keeping the language model out of the video path.** Loading Qwen inside the DeepStream process destabilized it, so it runs as a separate warm service. GPU offload cut one command's response from 14.3 s to 4.5 s.
+
+The [performance page](notes/performance.md) has the full measurements, Nsight timelines and method for each change.
+
+## How I work
+
+- **Measure before changing.** The stream logs a timestamp for every frame at each pipeline stage, every tilt write, and the drone's attitude at 25 Hz, so a recording can be lined up with the Pixhawk log to within a frame or two.
+- **Simulate the control loops.** The tilt, yaw and follow simulations import the controllers that run on the drone and drive them against models measured on the bench and in flight. They rank settings before a flight; they don't replace one.
+- **Bench-test the hardware.** Servo calibration (0.69 degrees of view per servo degree, 0.11 s delay), focus maps across the zoom range, and probes of the camera controller's timing.
+- **Compare on a fixed input.** Pipeline changes are compared on the same replay clip, identified by its SHA-256 hash.
+- **Write it up honestly.** Each [note](notes/) follows a template: question, baseline, one change, a primary metric, correctness checks, and whether the comparison is controlled or only observational, with its limits.
+
+## Status
+
+| Working in flight | Built, not flown yet | Next |
 | --- | --- | --- |
-| CPU inference limited the YOLOv8n stream | Moved inference to PyTorch CUDA, then exported a TensorRT FP16 engine | **8.5 → 23.7 → 30.0 FPS** in the application stream; 30 FPS was the camera ceiling. |
-| CPU color conversion added cost to the browser/hand path | Earlier optimization: produced BGR frames directly on the GPU, removing the CPU’s BGRx-to-BGR conversion | **3.10 → 1.61 ms** for CPU frame mapping/color preparation in short live samples. |
-| Frame callbacks prepared compressed images for an asynchronous hand worker | Standardized the later pipeline on RGB, moved hand transfer to shared memory, and updated output encoders | Callback **p95: 16.66 → 13.25 ms**; main-process CPU across six cores **21.77% → 19.68%** in two 30-second captures. Worker CPU and total-system savings were not measured. |
-| Copying GPU frames created a temporary CPU buffer and then a second NumPy copy | Copied directly into the final NumPy array, using a 2D CUDA copy for padded rows | Mean frame-copy time **6.17 → 3.16 ms**; callback **p95: 19.09 → 13.37 ms**; main-process CPU **28.06% → 23.78%** in a later pair of 30-second captures. |
-| TensorRT builder settings had an unknown payoff | Built separate YOLO26s detector and pose plans at optimization levels 3 and 5, then benchmarked each | Level 5 gave **+8.9% detector** and **+6.9% pose** throughput in isolated 10-second `trtexec` runs. |
-| CPU-only local Qwen responses were slow | Built `llama-cpp-python` with CUDA and offloaded supported layers | One command prompt fell from **14.3 → 4.52 s**; a conversational sample fell from **14–18 → 6.44 s**. |
-| A segmentation pass plus a pose pass on every person limited throughput | Used the YOLO26s pose model as the only person detector: one pass gives boxes and keypoints | **38.6 → 58.7 FPS** on a fixed replay clip with input capped at 60 FPS; same people found, lock held 88.6% → 89.2%. One run each. |
-| Frames queued before the camera-tilt controller saw them | Followed from the single-pass detector: the pipeline now keeps up with the 30 FPS camera | Frame-in to tilt decision **202 → 35–43 ms** (p50); camera tilt loop delay **0.63 → 0.24–0.27 s**. Separate flights, observational. |
-| Faster camera tilt overshot and hunted because of the loop delay | Added a Smith predictor that subtracts tilt already commanded but not yet visible, then doubled the tilt speed | Person more than 0.15 of the frame off centre **5.3% → 1.3–3.4%** of frames over four flights, with no hunting. Observational. |
+| Person lock with ReID, gesture commands, Movement mode, follow mode, auto tilt with the Smith predictor, 30 FPS pipeline | Tilt priority between zoom steps, zoom hold during fast pitch | Follow feed-forward from the pilot's speed, two-person lock tests in flight, longer-range tests |
 
-## RGB and shared-memory frame processing
+## Notes
 
-While reviewing the frame pipeline with Nsight Systems, I noticed frames were being converted back and forth between RGB and BGR: RGB from DeepStream became BGR for CPU processing **to match OpenCV’s default color convention**, then returned to RGB for MediaPipe. I standardized CPU frame processing on RGB to eliminate the redundant conversions and replaced JPEG hand-frame transfer with raw RGB shared memory. This reduced the work needed to pass frames between processes by removing JPEG encoding and decoding.
+- [Performance engineering](notes/performance.md): all measured results, with Nsight timelines
+- [Camera tilt loop](notes/camera-tilt-loop.md) and [pose model as the person detector](notes/pose-model-person-detector.md)
+- [RGB and shared memory](notes/rgb-shared-memory-comparison.md), [direct-to-NumPy copy](notes/direct-numpy-copy-comparison.md), [TensorRT level 3 versus 5](notes/tensorrt-builder-comparison.md)
+- [Case studies](notes/case-studies.md), the [May field log](notes/field-log.md) and the [later stream log](notes/recent-stream-log.md)
 
-The September 28 Nsight Systems comparison measured the synchronous frame callback and the separate MediaPipe recognition call before and after the RGB conversion. All latency values are milliseconds.
-
-| Measurement | Before: BGR + JPEG — p50 / p95 / p99 (ms) | After: RGB + shared memory — p50 / p95 / p99 (ms) | Relative change — p50 / p95 / p99 |
-| --- | ---: | ---: | ---: |
-| Frame callback | 7.63 / 16.66 / 20.12 | **6.53 / 13.25 / 18.60** | −14.4% / −20.5% / −7.6% |
-| Hand submission in the camera callback | 2.77 / 3.63 / 4.78 | **0.38 / 0.65 / 0.79** | −86.1% / −82.0% / −83.4% |
-| MediaPipe recognition | 77.28 / 122.33 / 126.76 | 83.03 / 119.92 / 129.38 | +7.4% / −2.0% / +2.1% |
-
-Relative change is `(after − before) / before × 100`, calculated from unrounded data. Negative latency changes mean faster; positive changes mean slower.
-
-Average utilization over each approximately 30-second capture:
-
-| Measurement | Before: BGR + JPEG | After: RGB + shared memory | Relative change | Scope |
-| --- | ---: | ---: | ---: | --- |
-| Main-process CPU utilization | **21.77%** | **19.68%** | −9.6% | Scheduled CPU time divided by capture time and six CPU cores. |
-
-Main-process CPU decreased by **9.6% relative**. CPU scheduling coverage excludes the separate MediaPipe, recording, and browser workers, so this does not establish total application CPU savings.
-
-The callback became shorter, while recognition latency showed no consistent improvement. Frame-callback latency excludes background completion and is not camera-to-browser latency.
-
-The [full RGB comparison](notes/rgb-shared-memory-comparison.md) includes sample counts, stage timings, measurement methods, and the derived JSON data. Scene activity was not held identical, and several pipeline components changed together.
-
-### Visual benchmarking log
-
-**Before — BGR conversion and JPEG hand-frame preparation**
-
-Capture: `vision-20260928-123919.nsys-rep`.
-
-![Nsight timeline before RGB standardization: an 11.924 ms Frame Processing range contains RGB-to-BGR conversion and JPEG hand-frame encoding.](assets/nsight/vision-20260928-123919-bgr.png)
-
-This frame's purple `Frame Processing` range spans **11.924 ms**. Within it,
-`RGB to BGR Conversion` takes **4.745 ms**, and `Process CPU Frame` takes
-**5.883 ms**, including **2.656 ms** of `Hand Frame Encoding`.
-
-**After — RGB frames and shared-memory hand transfer**
-
-Capture: `vision-20260928-133010.nsys-rep` (a later RGB run).
-
-![Nsight timeline with RGB and shared memory: a 7.687 ms Frame Processing range contains RGB Frame Copy and a shorter hand-submission section.](assets/nsight/vision-20260928-133010-rgb.png)
-
-This frame's purple `Frame Processing` range spans **7.687 ms**. `RGB Frame Copy`
-takes **4.261 ms**, and `Process CPU Frame` takes **2.788 ms**. Within the latter,
-`Process Hand Frame` takes **537 µs (0.537 ms)**, including **391.5 µs (0.3915 ms)**
-of `Hand Frame Snapshot` (timings supplied from the expanded Nsight ranges).
-JPEG hand-frame encoding has been replaced by this snapshot/submission work;
-preparation and recognition continue in the sender thread and MediaPipe process.
-
-These screenshots show individual frames at different timeline zoom levels.
-Their durations are examples, not averages or percentiles, and nested ranges
-should not be added together. The table above compares captures `123919` and
-`130901`; the after screenshot illustrates the RGB path in the later `133010`
-capture and is not the source of that table's statistics.
-
-## Direct-to-NumPy frame copy
-
-After standardizing the pipeline on RGB, I noticed that the frame-copy helper still copied GPU pixels into a temporary CPU buffer, then copied them again into a NumPy array. I changed it to allocate the final NumPy array first and copy directly into its memory. Padded image rows use `cudaMemcpy2D` so the copy skips padding while preserving the pixels.
-
-The September 28 captures at **18:27:31 (before)** and **18:57:12 (after)** both used RGB/shared-memory processing with the CPU frame path enabled. This is a later comparison with its own baseline.
-
-| Measurement | Before: temporary buffer + NumPy copy — p50 / p95 / p99 (ms) | After: direct NumPy copy — p50 / p95 / p99 (ms) | Relative change — p50 / p95 / p99 |
-| --- | ---: | ---: | ---: |
-| Frame callback | 9.63 / 19.09 / 29.67 | **7.22 / 13.37 / 17.13** | −25.0% / −30.0% / −42.3% |
-| RGB frame copy | 5.25 / 11.79 / 16.30 | **2.74 / 5.91 / 9.01** | −47.8% / −49.9% / −44.7% |
-
-Relative change is `(after − before) / before × 100`, calculated from unrounded data. Negative latency changes mean faster; positive changes mean slower.
-
-| Measurement | Before: temporary buffer + NumPy copy | After: direct NumPy copy | Relative change |
-| --- | ---: | ---: | ---: |
-| Average main-process CPU utilization across six cores | 28.06% | **23.78%** | −15.2% |
-| Mean RGB frame-copy time (ms) | 6.17 | **3.16** | −48.8% |
-
-Observed mean frame-copy time fell **48.8%**, and frame-callback p50/p95/p99 fell **25.0% / 30.0% / 42.3%**. Main-process CPU fell **4.28 percentage points**, or **15.2% relative**. The after capture recorded **900 `cudaMemcpy2D` calls**, confirming that the new path ran.
-
-CPU measurements exclude the separate workers, and callback latency is not camera-to-browser latency. Scene and PTZ conditions were not controlled, so these runs do not isolate the change's causal effect. The [full direct-to-NumPy comparison](notes/direct-numpy-copy-comparison.md) includes sample counts, methods, limitations, and derived data.
-
-### Frame-copy visual benchmarking log
-
-**Before — temporary CPU buffer followed by a NumPy copy**
-
-Capture: `vision-20260928-182731-cpu-frames.nsys-rep`.
-
-![Nsight timeline before the direct-to-NumPy change: RGB Frame Copy takes 3.970 ms, with cudaMemcpy visible in the CUDA API row.](assets/nsight/vision-20260928-182731-temporary-copy.png)
-
-This frame's `RGB Frame Copy` range spans **3.970 ms**, and the full `Frame Processing` callback spans **9.578 ms**. `Process CPU Frame` takes **3.152 ms**. The CUDA API row shows `cudaMemcpy`; the subsequent CPU-to-CPU NumPy copy is included in the frame-copy range but does not appear as a CUDA API call.
-
-**After — copy directly into the final NumPy array**
-
-Capture: `vision-20260928-185712-cpu-frames.nsys-rep`.
-
-![Nsight timeline after the direct-to-NumPy change: RGB Frame Copy takes 3.129 ms, with cudaMemcpy2D visible in the CUDA API row.](assets/nsight/vision-20260928-185712-direct-numpy.png)
-
-This frame's `RGB Frame Copy` range spans **3.129 ms**, and the full `Frame Processing` callback spans **6.373 ms**. `Process CPU Frame` takes **2.497 ms**. The CUDA API row shows `cudaMemcpy2D`, which copies the padded source rows into the final NumPy array.
-
-Both screenshots come from the same captures used in the table above: `182731` before and `185712` after. They illustrate individual frames at different timeline zoom levels, not averages or percentiles. Nested ranges should not be added together.
-
-## TensorRT optimization level 3 vs 5
-
-I created a benchmarking script that automatically builds and compares FP16-capable YOLO26s pose and detector TensorRT plans across builder optimization levels. On the same Orin Nano with TensorRT 10.16.2, the script built level 3 and level 5 plans, ran each through trtexec for 10 seconds after a 1-second warm-up, collected latency and throughput metrics, and selected the faster plans locally. Build time is a one-time cost; the other columns measure isolated engine inference.
-
-| Model | Level | Throughput (qps) | Mean latency (ms) | GPU mean / p99 (ms) | Build time (s) |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Pose | 3 | 146.832 | 7.198 | 6.804 / 7.085 | 440.30 |
-| Pose | **5** | **156.991** | **6.791** | **6.364 / 6.543** | 1,101.53 |
-| Detector | 3 | 155.401 | 6.824 | 6.429 / 6.714 | 38.34 |
-| Detector | **5** | **169.218** | **6.312** | **5.904 / 6.184** | 175.52 |
-
-Level 5 increased throughput by 6.9% for pose (146.8 → 157.0 qps) while reducing mean latency by 0.407 ms (5.7%). For detection, throughput increased by 8.9% (155.4 → 169.2 qps) while mean latency decreased by 0.512 ms (7.5%). GPU mean inference time improved by 0.440 ms (6.5%) for pose and 0.525 ms (8.2%) for detection. These gains came at approximately 2.5× and 4.6× longer one-time build times, respectively. Both level 5 plans were selected by the comparison script. The [full benchmark note](notes/tensorrt-builder-comparison.md) records the configuration and limits.
-
-## Pose model as the person detector
-
-The stream used to find people with YOLO26s segmentation, then ran a second DeepStream pass with YOLO26s pose on each person. Profiling put that at about 25 ms of GPU time per frame. The pose model's own output rows already hold each person's box and 17 keypoints, so I made it the only person detector. The stream now decodes the keypoints from the raw output tensor and matches them to each tracked detection.
-
-| Measurement (fixed replay clip, input capped at 60 FPS) | Segmentation + pose pass | Pose model as detector |
-| --- | ---: | ---: |
-| Processed FPS | 38.6 | **58.7** (+52.1%) |
-| Frames with a person / with a pose | 89.1% / 88.8% | 89.3% / 89.3% |
-| Person lock held | 88.6% (6 breaks) | 89.2% (3 breaks) |
-
-Keypoints for the same person in the same frame differed by a median 0.4% of the box height, and the derived gesture label agreed on 99.9% of frames. This was one run per variant; the raw reports were not kept, and distant people are untested. The [full note](notes/pose-model-person-detector.md) lists the workload and limits.
-
-## Camera tilt loop
-
-The camera's tilt servo keeps the person vertically centred, but a tilt move only shows up in a later frame. With one detector pass, frames stopped queueing in the pipeline. In flights, a frame reached the tilt decision in 35–43 ms (p50) instead of 202 ms, and the whole loop delay measured 0.24–0.27 s instead of 0.63 s. The delay still makes a controller that keeps correcting what it sees overshoot and hunt. So I added a Smith predictor: each frame, the controller subtracts the tilt it has already commanded but the frame cannot show yet. In simulation, that stopped twice-as-fast settings from hunting, and in four flights the person was more than 0.15 of the frame off centre in 1.3–3.4% of frames, against 5.3% before. These are separate flights in different places, so the comparisons are observational. The [camera tilt loop note](notes/camera-tilt-loop.md) has the per-session timings, the simulation and the limits.
-
-## System and engineering decisions
-
-The production path grew from a Python YOLO camera stream into **CSI camera → Argus/GStreamer → DeepStream YOLO26s detection and pose → hand-gesture worker → browser MJPEG**. I decoupled browser publication from camera/inference cadence, removed a JPEG encode/decode round trip before CPU hand processing, and used a secondary DeepStream pose engine on person regions, later replaced by the pose model as the only person detector. I kept MediaPipe for hands when it recognized closed-fist gestures more reliably than a lower-CPU TensorRT hand path.
-
-An intermittent video crash was a separate performance and reliability problem. I correlated DeepStream buffer-copy failures with kernel GPU MMU faults and CUDA error 700. Rebuilding the TensorRT engines fixed a device/profile warning but did **not** stop the crash. On the JetPack 6.2 / DeepStream 7.1 stack, switching the affected `nvvideoconvert` copies to VIC (`copy-hw=2`) addressed the observed failure; the stream held about 30 FPS through the recorded validation window. That workaround is specific to the older stack, not a blanket recommendation for every Jetson setup.
-
-For voice, I moved Qwen into a separate warm service after loading it inside the DeepStream process destabilized the pipeline. That traded roughly 607 MB of idle resident memory in one sample for process isolation and faster repeated responses.
-
-## Evidence and limits
-
-- **Hardware:** Jetson Orin Nano developer kit, 8 GB class, Ampere GPU (compute capability 8.7); Arducam 12MP 477P Pan Tilt Zoom camera connected over CSI.
-- **Software:** YOLO, TensorRT, DeepStream, MediaPipe, and local Qwen via `llama.cpp`.
-- **Measurement context:** Stream FPS includes the enabled camera, inference, hand/pose, overlay, and encoding stages. The 30 FPS camera cap limits what a stream FPS result can show. The builder-level comparison measures each TensorRT engine alone, not the full DeepStream pipeline.
-- **Confidence:** These are measurements from one device. Many are short operational samples rather than repeated controlled trials. Power mode and clocks can affect comparisons; instantaneous GPU clocks were not recorded for every run.
-
-Read the [case studies](notes/case-studies.md) for the changes and tradeoffs, the [RGB/shared-memory comparison](notes/rgb-shared-memory-comparison.md), [direct-to-NumPy comparison](notes/direct-numpy-copy-comparison.md), [TensorRT level 3 versus 5 comparison](notes/tensorrt-builder-comparison.md), [pose model as the person detector](notes/pose-model-person-detector.md), and [camera tilt loop](notes/camera-tilt-loop.md) for full benchmark numbers, or the sanitized [May field log](notes/field-log.md) and [later stream log](notes/recent-stream-log.md) for the chronological record. Commands in the logs document the configuration at the time and may no longer match the current application.
-
-The production application, model weights, TensorRT plans, recordings, and device-specific configuration are outside this notes repository. Local account paths and LAN addresses in the historical logs were replaced with documentation examples.
+Measurements come from one device and are often single runs; each note gives its limits. Commands in the logs show the configuration at the time and may not match the current application. Model weights, TensorRT plans, raw recordings and device configuration are not in this repository, and local account paths and LAN addresses in the logs were replaced with documentation examples.
