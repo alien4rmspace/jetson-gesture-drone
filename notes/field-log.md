@@ -116,13 +116,6 @@ Current verified optimized stream state:
 - Resource sample: RAM about `2.9 GB / 7.6 GB`, available RAM about `4.4 GB`, GPU GR3D about `0-29%`, power about `9.4-9.7 W`, CPU/GPU temperature about `54-55 C`.
 - Process sample: stream process about `94% CPU` and `959 MB RSS`; MediaPipe worker about `68% CPU` and `209 MB RSS`; `nvargus-daemon` about `14% CPU` and `152 MB RSS`.
 
-## Further Efficiency Options
-
-- Lower `--imgsz` to `256` if more speed is needed.
-- Lower stream rendering cost with `--max-stream-width 640 --jpeg-quality 65 --stream-fps 8`.
-- Add an `--infer-every` option to avoid running detection on every frame.
-- Skip `result.plot()` when detections are needed for control logic but not for visual display.
-
 ## Resource Usage Log
 
 ### 2026-05-04 02:00 local

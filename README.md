@@ -4,7 +4,11 @@ I'm building a drone that flies by hand gesture, locks onto its pilot, and keeps
 
 I wrote the software and fly the test flights. The application repository is private; this repository holds the write-ups, measurements and clips. Since May 2026 the application has grown to 254 commits and about 1,400 automated tests.
 
+[What it does](#what-it-does) · [How it works](#how-it-works) · [Engineering highlights](#engineering-highlights) · [How I work](#how-i-work) · [Status](#status)
+
 https://github.com/user-attachments/assets/c954f707-9052-458e-8af9-3767928d823a
+
+*This video was recorded before the camera's gimbal-style tilt stabilization was added, so the view still tips as the drone pitches.*
 
 ## What it does
 
@@ -59,6 +63,25 @@ Work that can block or crash runs in its own process: MediaPipe, recording, the 
 
 <img width="487" height="275" alt="Parts used to build the drone" src="https://github.com/user-attachments/assets/5c6273e2-32c8-41bb-ae67-dcec354ec745" />
 
+### Code structure
+
+The application is one Python package of about 33,000 lines, with 16,700 lines of tests, split by responsibility:
+
+| Package | What it owns |
+| --- | --- |
+| `apps` | Entry points: the vision stream and its supervisor, the voice, speech, recordings and MCP servers, stream settings |
+| `vision` | DeepStream pipeline, pose decoding, person tracking and lock, hand crops and the MediaPipe worker, replay input |
+| `commands` | Mapping gestures to commands |
+| `flight` | MAVLink link, command router and controller, follow mode, auto yaw and heading aim, flight-mode checks, Pixhawk log download |
+| `camera` | The camera controller (tilt, zoom, focus over I2C), auto tilt and stabilization, focus maps, image settings, bench calibration tools |
+| `recording` | Segmented recording in its own process, overlays |
+| `web` | Browser stream and control page |
+| `audio` | Voice command parsing |
+| `sim` | Closed-loop tilt, yaw and follow simulations that run the drone's own controllers |
+| `analysis` | Flight log review, recording and overlay timing, stream FPS, Nsight marker analysis |
+
+Settings live in YAML stream profiles: a default plus profiles for test flights, replay, bench calibration and A/B tests. A flight's configuration is a file, not a string of command-line flags.
+
 ## Engineering highlights
 
 Each of these started from a flight recording or a measurement, and most were checked in simulation or on the bench before flying.
@@ -103,6 +126,6 @@ The [performance page](notes/performance.md) has the full measurements, Nsight t
 - [Performance engineering](notes/performance.md): all measured results, with Nsight timelines
 - [Camera tilt loop](notes/camera-tilt-loop.md) and [pose model as the person detector](notes/pose-model-person-detector.md)
 - [RGB and shared memory](notes/rgb-shared-memory-comparison.md), [direct-to-NumPy copy](notes/direct-numpy-copy-comparison.md), [TensorRT level 3 versus 5](notes/tensorrt-builder-comparison.md)
-- [Case studies](notes/case-studies.md), the [May field log](notes/field-log.md) and the [later stream log](notes/recent-stream-log.md)
+- [Optimization case studies](notes/case-studies.md), the [May field log](notes/field-log.md) and the [later stream log](notes/recent-stream-log.md)
 
 Measurements come from one device and are often single runs; each note gives its limits. Commands in the logs show the configuration at the time and may not match the current application. Model weights, TensorRT plans, raw recordings and device configuration are not in this repository, and local account paths and LAN addresses in the logs were replaced with documentation examples.
