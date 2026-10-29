@@ -29,7 +29,7 @@ All clips are from flights on 2026-10-28, with the stream's overlays: the top ba
 - **Takes gestures as flight commands.** Two closed fists enter Movement mode. Hand and arm gestures then move the drone forward, back, left, right, up and down; two open palms or crossed arms stop it. Only the locked person's gestures count, and a move only starts while both of their eyes are visible, so a person facing away can't start one.
 - **Follow mode.** Two thumbs up start follow mode. The drone flies forward or backward to keep the pilot at the distance they were when it started, while auto yaw turns to keep them centred.
 - **Keeps the pilot framed.** The tilt servo keeps the pilot vertically centred and turns against the drone's pitch like a gimbal. Auto zoom keeps the pilot at a set size in the frame, and a measured zoom-to-focus map keeps the image sharp.
-- **Voice commands (optional).** Spoken or typed commands go to a local Qwen model running under `llama.cpp` on the GPU, which turns them into the same commands as gestures. Piper speaks the replies.
+- **Voice control (work in progress).** A first version works: spoken or typed commands go to a local Qwen model running under `llama.cpp` on the Jetson's GPU, which turns them into the same commands as gestures, and Piper speaks the replies. Next I'm building an iOS app that connects to Meta smart glasses, so I can talk to the drone and hear its replies through the glasses while I fly.
 - **Browser control.** A web page shows the live annotated stream, switches stream profiles, and plays back recordings with the overlays.
 
 **Safety.** Gesture and voice commands go through one command router. Movement is only sent while a recent Pixhawk heartbeat reports GUIDED mode and the drone is armed; switching the flight mode on the radio ends gesture control at once. Motion output can also be switched off with a stream profile.
@@ -42,7 +42,7 @@ Arducam 12 MP pan-tilt-zoom camera (CSI)
        YOLO26s-pose, TensorRT FP16: people + 17 body keypoints in one pass
        NvDCF tracker + ReID embeddings: persistent IDs
   -> person lock -> gestures: body pose + MediaPipe hands (separate process)
-  -> command router  <- voice: local Qwen (separate process)
+  -> command router  <- voice: local Qwen (separate process; in progress)
   -> MAVLink, GUIDED only -> Pixhawk 6C / ArduCopter 4.6
   -> camera controller over I2C: tilt, zoom, focus
   -> browser MJPEG stream, recordings with overlays
@@ -96,7 +96,7 @@ The [performance page](notes/performance.md) has the full measurements, Nsight t
 
 | Working in flight | Built, not flown yet | Next |
 | --- | --- | --- |
-| Person lock with ReID, gesture commands, Movement mode, follow mode, auto tilt with the Smith predictor, 30 FPS pipeline | Tilt priority between zoom steps, zoom hold during fast pitch | Follow feed-forward from the pilot's speed, two-person lock tests in flight, longer-range tests |
+| Person lock with ReID, gesture commands, Movement mode, follow mode, auto tilt with the Smith predictor, 30 FPS pipeline | Tilt priority between zoom steps, zoom hold during fast pitch | Voice control through an iOS app and Meta smart glasses, follow feed-forward from the pilot's speed, two-person lock tests in flight, longer-range tests |
 
 ## Notes
 
