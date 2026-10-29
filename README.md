@@ -27,6 +27,9 @@ https://github.com/user-attachments/assets/c954f707-9052-458e-8af9-3767928d823a
 | Copying GPU frames created a temporary CPU buffer and then a second NumPy copy | Copied directly into the final NumPy array, using a 2D CUDA copy for padded rows | Mean frame-copy time **6.17 → 3.16 ms**; callback **p95: 19.09 → 13.37 ms**; main-process CPU **28.06% → 23.78%** in a later pair of 30-second captures. |
 | TensorRT builder settings had an unknown payoff | Built separate YOLO26s detector and pose plans at optimization levels 3 and 5, then benchmarked each | Level 5 gave **+8.9% detector** and **+6.9% pose** throughput in isolated 10-second `trtexec` runs. |
 | CPU-only local Qwen responses were slow | Built `llama-cpp-python` with CUDA and offloaded supported layers | One command prompt fell from **14.3 → 4.52 s**; a conversational sample fell from **14–18 → 6.44 s**. |
+| A segmentation pass plus a pose pass on every person limited throughput | Used the YOLO26s pose model as the only person detector: one pass gives boxes and keypoints | **38.6 → 58.7 FPS** on a fixed replay clip with input capped at 60 FPS; same people found, lock held 88.6% → 89.2%. One run each. |
+| Frames queued before the camera-tilt controller saw them | Followed from the single-pass detector: the pipeline now keeps up with the 30 FPS camera | Frame-in to tilt decision **202 → 35–43 ms** (p50); camera tilt loop delay **0.63 → 0.24–0.27 s**. Separate flights, observational. |
+| Faster camera tilt overshot and hunted because of the loop delay | Added a Smith predictor that subtracts tilt already commanded but not yet visible, then doubled the tilt speed | Person more than 0.15 of the frame off centre **5.3% → 1.3–3.4%** of frames over four flights, with no hunting. Observational. |
 
 ## RGB and shared-memory frame processing
 
@@ -140,9 +143,25 @@ I created a benchmarking script that automatically builds and compares FP16-capa
 
 Level 5 increased throughput by 6.9% for pose (146.8 → 157.0 qps) while reducing mean latency by 0.407 ms (5.7%). For detection, throughput increased by 8.9% (155.4 → 169.2 qps) while mean latency decreased by 0.512 ms (7.5%). GPU mean inference time improved by 0.440 ms (6.5%) for pose and 0.525 ms (8.2%) for detection. These gains came at approximately 2.5× and 4.6× longer one-time build times, respectively. Both level 5 plans were selected by the comparison script. The [full benchmark note](notes/tensorrt-builder-comparison.md) records the configuration and limits.
 
+## Pose model as the person detector
+
+The stream used to find people with YOLO26s segmentation, then ran a second DeepStream pass with YOLO26s pose on each person. Profiling put that at about 25 ms of GPU time per frame. The pose model's own output rows already hold each person's box and 17 keypoints, so I made it the only person detector. The stream now decodes the keypoints from the raw output tensor and matches them to each tracked detection.
+
+| Measurement (fixed replay clip, input capped at 60 FPS) | Segmentation + pose pass | Pose model as detector |
+| --- | ---: | ---: |
+| Processed FPS | 38.6 | **58.7** (+52.1%) |
+| Frames with a person / with a pose | 89.1% / 88.8% | 89.3% / 89.3% |
+| Person lock held | 88.6% (6 breaks) | 89.2% (3 breaks) |
+
+Keypoints for the same person in the same frame differed by a median 0.4% of the box height, and the derived gesture label agreed on 99.9% of frames. This was one run per variant; the raw reports were not kept, and distant people are untested. The [full note](notes/pose-model-person-detector.md) lists the workload and limits.
+
+## Camera tilt loop
+
+The camera's tilt servo keeps the person vertically centred, but a tilt move only shows up in a later frame. With one detector pass, frames stopped queueing in the pipeline. In flights, a frame reached the tilt decision in 35–43 ms (p50) instead of 202 ms, and the whole loop delay measured 0.24–0.27 s instead of 0.63 s. The delay still makes a controller that keeps correcting what it sees overshoot and hunt. So I added a Smith predictor: each frame, the controller subtracts the tilt it has already commanded but the frame cannot show yet. In simulation, that stopped twice-as-fast settings from hunting, and in four flights the person was more than 0.15 of the frame off centre in 1.3–3.4% of frames, against 5.3% before. These are separate flights in different places, so the comparisons are observational. The [camera tilt loop note](notes/camera-tilt-loop.md) has the per-session timings, the simulation and the limits.
+
 ## System and engineering decisions
 
-The production path grew from a Python YOLO camera stream into **CSI camera → Argus/GStreamer → DeepStream YOLO26s detection and pose → hand-gesture worker → browser MJPEG**. I decoupled browser publication from camera/inference cadence, removed a JPEG encode/decode round trip before CPU hand processing, and used a secondary DeepStream pose engine on person regions. I kept MediaPipe for hands when it recognized closed-fist gestures more reliably than a lower-CPU TensorRT hand path.
+The production path grew from a Python YOLO camera stream into **CSI camera → Argus/GStreamer → DeepStream YOLO26s detection and pose → hand-gesture worker → browser MJPEG**. I decoupled browser publication from camera/inference cadence, removed a JPEG encode/decode round trip before CPU hand processing, and used a secondary DeepStream pose engine on person regions, later replaced by the pose model as the only person detector. I kept MediaPipe for hands when it recognized closed-fist gestures more reliably than a lower-CPU TensorRT hand path.
 
 An intermittent video crash was a separate performance and reliability problem. I correlated DeepStream buffer-copy failures with kernel GPU MMU faults and CUDA error 700. Rebuilding the TensorRT engines fixed a device/profile warning but did **not** stop the crash. On the JetPack 6.2 / DeepStream 7.1 stack, switching the affected `nvvideoconvert` copies to VIC (`copy-hw=2`) addressed the observed failure; the stream held about 30 FPS through the recorded validation window. That workaround is specific to the older stack, not a blanket recommendation for every Jetson setup.
 
@@ -155,6 +174,6 @@ For voice, I moved Qwen into a separate warm service after loading it inside the
 - **Measurement context:** Stream FPS includes the enabled camera, inference, hand/pose, overlay, and encoding stages. The 30 FPS camera cap limits what a stream FPS result can show. The builder-level comparison measures each TensorRT engine alone, not the full DeepStream pipeline.
 - **Confidence:** These are measurements from one device. Many are short operational samples rather than repeated controlled trials. Power mode and clocks can affect comparisons; instantaneous GPU clocks were not recorded for every run.
 
-Read the [case studies](notes/case-studies.md) for the changes and tradeoffs, the [RGB/shared-memory comparison](notes/rgb-shared-memory-comparison.md), [direct-to-NumPy comparison](notes/direct-numpy-copy-comparison.md), and [TensorRT level 3 versus 5 comparison](notes/tensorrt-builder-comparison.md) for full benchmark numbers, or the sanitized [May field log](notes/field-log.md) and [later stream log](notes/recent-stream-log.md) for the chronological record. Commands in the logs document the configuration at the time and may no longer match the current application.
+Read the [case studies](notes/case-studies.md) for the changes and tradeoffs, the [RGB/shared-memory comparison](notes/rgb-shared-memory-comparison.md), [direct-to-NumPy comparison](notes/direct-numpy-copy-comparison.md), [TensorRT level 3 versus 5 comparison](notes/tensorrt-builder-comparison.md), [pose model as the person detector](notes/pose-model-person-detector.md), and [camera tilt loop](notes/camera-tilt-loop.md) for full benchmark numbers, or the sanitized [May field log](notes/field-log.md) and [later stream log](notes/recent-stream-log.md) for the chronological record. Commands in the logs document the configuration at the time and may no longer match the current application.
 
 The production application, model weights, TensorRT plans, recordings, and device-specific configuration are outside this notes repository. Local account paths and LAN addresses in the historical logs were replaced with documentation examples.

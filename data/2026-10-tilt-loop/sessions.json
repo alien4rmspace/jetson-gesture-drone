@@ -1,0 +1,275 @@
+{
+ "description": "Per-session tilt timing and framing from the drone's tilt timing log (drone_ai.camera.tilt_timing_analysis and drone_ai.camera.tilt_framing). Latencies in ms; mux = frame entering DeepStream's nvstreammux (excludes exposure and Argus buffering); probe = detector/tracker metadata ready; publish = tilt controller decision. Loop delay = lag that best aligns tilt writes with opposite box motion. Framing errors are fractions of frame height.",
+ "sessions": [
+  {
+   "session": "d7a9e0df",
+   "start_local": "2026-10-16 13:18",
+   "detector": "segmentation detector + per-person pose pass",
+   "tilt": "20 deg/s, slow zone 0.30, no predictor",
+   "conditions": "outdoor flight",
+   "frames": 6976,
+   "frames_with_person_box": 6673,
+   "duration_s": 298.0,
+   "processed_fps": 23.4,
+   "metadata_to_publish_ms": {
+    "n": 6976,
+    "p50": 40.0,
+    "p90": 48.7,
+    "p99": 56.9
+   },
+   "mux_to_metadata_ms": {
+    "n": 6976,
+    "p50": 161.5,
+    "p90": 179.5,
+    "p99": 195.2
+   },
+   "mux_to_publish_ms": {
+    "n": 6976,
+    "p50": 202.1,
+    "p90": 223.0,
+    "p99": 240.9
+   },
+   "delay_publish": {
+    "lag_s": 0.63,
+    "r": -0.33,
+    "moving_pairs": 1247,
+    "meets_confidence_bar": false
+   },
+   "delay_mux": {
+    "lag_s": 0.4,
+    "r": -0.34,
+    "moving_pairs": 1248,
+    "meets_confidence_bar": false
+   },
+   "framing": {
+    "error_p50": 0.028,
+    "error_p90": 0.1142,
+    "error_p99": 0.217,
+    "off_centre_share": 0.0529,
+    "edge_share": 0.0418,
+    "edge_share_fitting": 0.0307,
+    "tall_share": 0.0069,
+    "tilt_moves": 229,
+    "reversals": 19,
+    "quick_reversals": 2,
+    "stop_go": 60
+   }
+  },
+  {
+   "session": "3261dad8",
+   "start_local": "2026-10-27 19:54",
+   "detector": "pose model as detector",
+   "tilt": "40 deg/s, slow zone 0.10, predictor (delay 0.45 s)",
+   "conditions": "two indoor ALT_HOLD flights",
+   "frames": 25720,
+   "frames_with_person_box": 4538,
+   "duration_s": 856.9,
+   "processed_fps": 30.0,
+   "metadata_to_publish_ms": {
+    "n": 25720,
+    "p50": 13.8,
+    "p90": 19.2,
+    "p99": 26.6
+   },
+   "mux_to_metadata_ms": {
+    "n": 25720,
+    "p50": 20.8,
+    "p90": 29.6,
+    "p99": 40.3
+   },
+   "mux_to_publish_ms": {
+    "n": 25720,
+    "p50": 35.0,
+    "p90": 48.6,
+    "p99": 62.5
+   },
+   "delay_publish": {
+    "lag_s": 0.27,
+    "r": -0.6,
+    "moving_pairs": 1272,
+    "meets_confidence_bar": true
+   },
+   "delay_mux": {
+    "lag_s": 0.21,
+    "r": -0.6,
+    "moving_pairs": 1282,
+    "meets_confidence_bar": true
+   },
+   "framing": {
+    "error_p50": 0.0382,
+    "error_p90": 0.0885,
+    "error_p99": 0.16,
+    "off_centre_share": 0.0134,
+    "edge_share": 0.0994,
+    "edge_share_fitting": 0.006,
+    "tall_share": 0.069,
+    "tilt_moves": 164,
+    "reversals": 17,
+    "quick_reversals": 3,
+    "stop_go": 31
+   }
+  },
+  {
+   "session": "84511dfd",
+   "start_local": "2026-10-28 15:22",
+   "detector": "pose model as detector",
+   "tilt": "40 deg/s, slow zone 0.10, predictor (delay 0.27 s)",
+   "conditions": "ALT_HOLD and Guided flights",
+   "frames": 18378,
+   "frames_with_person_box": 14358,
+   "duration_s": 612.1,
+   "processed_fps": 30.0,
+   "metadata_to_publish_ms": {
+    "n": 18378,
+    "p50": 15.7,
+    "p90": 20.3,
+    "p99": 25.4
+   },
+   "mux_to_metadata_ms": {
+    "n": 18378,
+    "p50": 25.8,
+    "p90": 30.9,
+    "p99": 37.7
+   },
+   "mux_to_publish_ms": {
+    "n": 18378,
+    "p50": 41.8,
+    "p90": 50.3,
+    "p99": 58.8
+   },
+   "delay_publish": {
+    "lag_s": 0.26,
+    "r": -0.51,
+    "moving_pairs": 4047,
+    "meets_confidence_bar": true
+   },
+   "delay_mux": {
+    "lag_s": 0.21,
+    "r": -0.51,
+    "moving_pairs": 4069,
+    "meets_confidence_bar": true
+   },
+   "framing": {
+    "error_p50": 0.0447,
+    "error_p90": 0.0929,
+    "error_p99": 0.1834,
+    "off_centre_share": 0.0267,
+    "edge_share": 0.053,
+    "edge_share_fitting": 0.0127,
+    "tall_share": 0.0317,
+    "tilt_moves": 770,
+    "reversals": 72,
+    "quick_reversals": 13,
+    "stop_go": 129
+   }
+  },
+  {
+   "session": "957121e1",
+   "start_local": "2026-10-28 16:00",
+   "detector": "pose model as detector",
+   "tilt": "40 deg/s, slow zone 0.10, predictor (delay 0.27 s)",
+   "conditions": "Guided flight",
+   "frames": 16001,
+   "frames_with_person_box": 14261,
+   "duration_s": 533.0,
+   "processed_fps": 30.0,
+   "metadata_to_publish_ms": {
+    "n": 16001,
+    "p50": 15.9,
+    "p90": 21.4,
+    "p99": 28.0
+   },
+   "mux_to_metadata_ms": {
+    "n": 16001,
+    "p50": 27.1,
+    "p90": 32.7,
+    "p99": 48.2
+   },
+   "mux_to_publish_ms": {
+    "n": 16001,
+    "p50": 43.3,
+    "p90": 53.5,
+    "p99": 71.9
+   },
+   "delay_publish": {
+    "lag_s": 0.25,
+    "r": -0.51,
+    "moving_pairs": 2901,
+    "meets_confidence_bar": true
+   },
+   "delay_mux": {
+    "lag_s": 0.2,
+    "r": -0.51,
+    "moving_pairs": 2935,
+    "meets_confidence_bar": true
+   },
+   "framing": {
+    "error_p50": 0.0371,
+    "error_p90": 0.0794,
+    "error_p99": 0.1736,
+    "off_centre_share": 0.0149,
+    "edge_share": 0.023,
+    "edge_share_fitting": 0.0073,
+    "tall_share": 0.0132,
+    "tilt_moves": 452,
+    "reversals": 61,
+    "quick_reversals": 10,
+    "stop_go": 77
+   }
+  },
+  {
+   "session": "28758297",
+   "start_local": "2026-10-28 16:04",
+   "detector": "pose model as detector",
+   "tilt": "40 deg/s, slow zone 0.10, predictor (delay 0.27 s)",
+   "conditions": "AutoTune, ALT_HOLD and Guided flights",
+   "frames": 12587,
+   "frames_with_person_box": 9232,
+   "duration_s": 419.0,
+   "processed_fps": 30.0,
+   "metadata_to_publish_ms": {
+    "n": 12587,
+    "p50": 15.3,
+    "p90": 20.2,
+    "p99": 25.2
+   },
+   "mux_to_metadata_ms": {
+    "n": 12587,
+    "p50": 25.7,
+    "p90": 30.9,
+    "p99": 37.7
+   },
+   "mux_to_publish_ms": {
+    "n": 12587,
+    "p50": 41.3,
+    "p90": 50.3,
+    "p99": 59.1
+   },
+   "delay_publish": {
+    "lag_s": 0.24,
+    "r": -0.47,
+    "moving_pairs": 2001,
+    "meets_confidence_bar": false
+   },
+   "delay_mux": {
+    "lag_s": 0.18,
+    "r": -0.48,
+    "moving_pairs": 2024,
+    "meets_confidence_bar": false
+   },
+   "framing": {
+    "error_p50": 0.0396,
+    "error_p90": 0.0925,
+    "error_p99": 0.1983,
+    "off_centre_share": 0.0343,
+    "edge_share": 0.0538,
+    "edge_share_fitting": 0.0099,
+    "tall_share": 0.0418,
+    "tilt_moves": 352,
+    "reversals": 37,
+    "quick_reversals": 13,
+    "stop_go": 54
+   }
+  }
+ ]
+}
