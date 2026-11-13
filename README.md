@@ -33,7 +33,7 @@ All clips are from flights on 2026-10-28, with the stream's overlays at the time
 - **Takes gestures as flight commands.** Two closed fists enter Movement mode. Hand and arm gestures then move the drone forward, back, left, right, up and down; two open palms or crossed arms stop it. Only the locked person's gestures count, and a move only starts while both of their eyes are visible, so a person facing away can't start one.
 - **Follow mode.** Two thumbs up start follow mode. The drone flies forward or backward to keep the pilot at the distance they were when it started, while auto yaw turns to keep them centred.
 - **Keeps the pilot framed.** The tilt servo keeps the pilot vertically centred and turns against the drone's pitch like a gimbal. Auto zoom keeps the pilot at a set size in the frame, and a measured zoom-to-focus map keeps the image sharp.
-- **Voice control (work in progress).** A first version works: spoken or typed commands go to a local Qwen model running under `llama.cpp` on the Jetson's GPU, which turns them into the same commands as gestures, and Piper speaks the replies. Next I'm building an iOS app that connects to Meta smart glasses, so I can talk to the drone and hear its replies through the glasses while I fly.
+- **Voice control (work in progress).** A first version works: spoken or typed commands go to a local language model, Gemma 4 E2B ([chosen over Qwen3.5-4B](notes/text-command-model-comparison.md)), running under `llama.cpp` on the Jetson's GPU. It turns them into the same commands as gestures, its output is constrained to a JSON schema so it can only name a known command, and Piper speaks the replies. Next I'm building an iOS app that connects to Meta smart glasses, so I can talk to the drone and hear its replies through the glasses while I fly.
 - **Browser control.** A web page shows the live annotated stream, switches stream profiles, and plays back recordings. Recordings are saved clean with a per-frame data file, and the recordings page draws overlays onto a copy: a presentation style for sharing, or one with a debug telemetry layer (tracking scores, eye gate, gestures, tilt, zoom, focus, frame rates).
 
 **Safety.** Gesture and voice commands go through one command router. Movement is only sent while a recent Pixhawk heartbeat reports GUIDED mode and the drone is armed; switching the flight mode on the radio ends gesture control at once. Motion output can also be switched off with a stream profile.
@@ -46,7 +46,7 @@ Arducam 12 MP pan-tilt-zoom camera (CSI)
        YOLO26s-pose, TensorRT FP16: people + 17 body keypoints in one pass
        NvDCF tracker + ReID embeddings: persistent IDs
   -> person lock -> gestures: body pose + MediaPipe hands (separate process)
-  -> command router  <- voice: local Qwen (separate process; in progress)
+  -> command router  <- voice/text: local Gemma 4 E2B (separate process; in progress)
   -> MAVLink, GUIDED only -> Pixhawk 6C / ArduCopter 4.6
   -> camera controller over I2C: tilt, zoom, focus
   -> browser MJPEG stream, 720p 20 FPS, with overlays
@@ -107,6 +107,7 @@ Each of these started from a flight recording or a measurement, and most were ch
 - **Checking what was actually deployed.** A September benchmark picked TensorRT optimization level 5 for the pose model, but the engine the stream loaded took 8.1 ms per inference, not 6.5. Rebuilt at level 5, it cut the stream's GPU load from 43% to 34% with essentially the same detections. The CPU, at about 80%, is the tighter resource. [Note](notes/tensorrt-builder-comparison.md#follow-up-2026-11-12-the-pose-engine-the-stream-was-using)
 - **A crash that wasn't the model.** The video pipeline crashed at random. I matched DeepStream buffer-copy failures to kernel GPU memory faults and CUDA error 700, ruled out the TensorRT engines by rebuilding them, and stopped it by moving the affected copies to the Jetson's VIC hardware (`copy-hw=2`) on that JetPack release.
 - **Keeping the language model out of the video path.** Loading Qwen inside the DeepStream process destabilized it, so it runs as a separate warm service. GPU offload cut one command's response from 14.3 s to 4.5 s.
+- **Picking the on-board language model.** I benchmarked Qwen3.5-4B against Gemma 4 E2B for text commands on 95 labeled sentences. First I fixed two slowdowns that had nothing to do with the models: Qwen3.5's hybrid layers cannot reuse a cached prompt, so the parser restores a saved state after the fixed instructions, and the JSON grammar was checked against all 248,320 vocabulary tokens at every step, so it now checks the top token first, which gives the same answer for greedy decoding. Gemma then answered in **1.13 s** at the median against 1.72 s, needs about **1.9 GiB** of GPU memory against 3.1 GiB, and was more accurate (95.8% against 91.6%), so it is now the default. [Note](notes/text-command-model-comparison.md)
 
 The [performance page](notes/performance.md) has the full measurements, Nsight timelines and method for each change.
 
@@ -130,6 +131,7 @@ The [performance page](notes/performance.md) has the full measurements, Nsight t
 - [Camera tilt loop](notes/camera-tilt-loop.md) and [pose model as the person detector](notes/pose-model-person-detector.md)
 - [RGB and shared memory](notes/rgb-shared-memory-comparison.md), [direct-to-NumPy copy](notes/direct-numpy-copy-comparison.md), [TensorRT level 3 versus 5](notes/tensorrt-builder-comparison.md)
 - [Clean 1080p recording with a frame data file](notes/recording-and-overlays.md) and [MediaPipe 0.10.18 versus 1.2.3](notes/mediapipe-version-comparison.md)
+- [Gemma 4 E2B versus Qwen3.5-4B for text commands](notes/text-command-model-comparison.md)
 - [Optimization case studies](notes/case-studies.md), the [May field log](notes/field-log.md) and the [later stream log](notes/recent-stream-log.md)
 
 Measurements come from one device and are often single runs; each note gives its limits. Commands in the logs show the configuration at the time and may not match the current application. Model weights, TensorRT plans, raw recordings and device configuration are not in this repository, and local account paths and LAN addresses in the logs were replaced with documentation examples.

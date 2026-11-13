@@ -21,6 +21,7 @@ Measurements come from one Jetson Orin Nano. Many are short operational samples 
 | Drawing overlays inside the recorder made 1080p 30 FPS recording drop frames | Recorded the clean frame plus a per-frame data file, and render overlays onto a copy afterwards | Recorder drops **67 → 2** (both at startup) on a fixed replay clip; renders also put hand results back on their own frames instead of 182 ms late. One run each, not flown. |
 | The livestream delivered fewer frames than its setting | Replaced the skip-if-too-soon rate limit with a fixed schedule | At a setting of 20: **14.5–14.8 → 19.8–20.0 FPS** delivered. Short samples. |
 | The hand worker was on MediaPipe 0.10.18 (2024) | Upgraded to MediaPipe 1.2.3 | No change in results (landmarks 0.22 px apart, gestures 99.4% agree) and no established speed change. Alternating runs on identical crops. |
+| The on-board language model for text commands: Qwen3.5-4B or Gemma 4 E2B | Benchmarked both on 95 labeled sentences, after making both fast (saved prompt state, top-token grammar check); chose Gemma 4 E2B | Median **1.72 → 1.13 s** per command, slowest 1 in 20 **2.80 → 1.72 s**; GPU memory **≈3.1 → ≈1.9 GiB**; accuracy 91.6% → 95.8%. Three runs each, stream off; Gemma still has one false follow. |
 
 ## RGB and shared-memory frame processing
 
@@ -161,3 +162,9 @@ Because the data file records which frame each hand result came from, renders pu
 ## MediaPipe 1.2.3
 
 MediaPipe 1.x again ships Linux aarch64 wheels, so I compared 1.2.3 with 0.10.18 on 900 identical hand crops in alternating runs. Landmarks differed by 0.22 px at the median and gesture labels agreed on 99.4% of crops. 1.2.3 was 6–24 ms per call faster, but the gap shrank each pair, so the speed difference is not established. On the replay, hand rate and hand lag were the same. I adopted it for support, not for speed: the hand lag comes from running the models on the CPU. The [comparison note](mediapipe-version-comparison.md) has the details.
+
+## Text-command model: Gemma 4 E2B over Qwen3.5-4B
+
+The drone turns typed commands into the same commands as gestures with a small language model on the Jetson's GPU. I compared Qwen3.5-4B with Gemma 4 E2B on 95 hand-labeled sentences, three fresh-process runs each in alternating order. First I fixed two slowdowns that had nothing to do with the models: Qwen3.5's hybrid layers could not reuse the cached instructions, so the parser now restores a saved state, and llama-cpp-python checked every one of 248,320 tokens against the JSON grammar at each step, so the parser now checks the top token first. That took Qwen3.5 from about 5 s to 1.8 s per command.
+
+Gemma 4 E2B then answered in **1.13 s** at the median against 1.72 s (slowest 1 in 20: 1.72 against 2.80 s) and needs about **1.9 GiB** on the GPU against 3.1 GiB. Its file is bigger, but most of it is a per-layer embedding table that llama.cpp leaves memory-mapped instead of copying to the GPU. It was also more accurate, 95.8% against 91.6%, though "fly over the crowd as low as you can" came out as follow in every run. I made Gemma the default and kept Qwen3.5 installed. The [comparison note](text-command-model-comparison.md) has the method, every miss and the limits.
