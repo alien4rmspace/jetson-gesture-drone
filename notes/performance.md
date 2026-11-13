@@ -17,6 +17,10 @@ Measurements come from one Jetson Orin Nano. Many are short operational samples 
 | A segmentation pass plus a pose pass on every person limited throughput | Used the YOLO26s pose model as the only person detector: one pass gives boxes and keypoints | **38.6 → 58.7 FPS** on a fixed replay clip with input capped at 60 FPS; same people found, lock held 88.6% → 89.2%. One run each. |
 | Frames queued before the camera-tilt controller saw them | Followed from the single-pass detector: the pipeline now keeps up with the 30 FPS camera | Frame-in to tilt decision **202 → 35–43 ms** (p50); camera tilt loop delay **0.63 → 0.24–0.27 s**. Separate flights, observational. |
 | Faster camera tilt overshot and hunted because of the loop delay | Added a Smith predictor that subtracts tilt already commanded but not yet visible, then doubled the tilt speed | Person more than 0.15 of the frame off centre **5.3% → 1.3–3.4%** of frames over four flights, with no hunting. Observational. |
+| The stream's pose engine was not the faster level 5 build the benchmark had picked | Rebuilt the pose engine at TensorRT optimization level 5 | GPU compute **8.1 → 6.5 ms** per inference; whole-stream GPU load **43% → 34%** mean at the same 29.1 FPS, with the same detections. One replay per engine. |
+| Drawing overlays inside the recorder made 1080p 30 FPS recording drop frames | Recorded the clean frame plus a per-frame data file, and render overlays onto a copy afterwards | Recorder drops **67 → 2** (both at startup) on a fixed replay clip; renders also put hand results back on their own frames instead of 182 ms late. One run each, not flown. |
+| The livestream delivered fewer frames than its setting | Replaced the skip-if-too-soon rate limit with a fixed schedule | At a setting of 20: **14.5–14.8 → 19.8–20.0 FPS** delivered. Short samples. |
+| The hand worker was on MediaPipe 0.10.18 (2024) | Upgraded to MediaPipe 1.2.3 | No change in results (landmarks 0.22 px apart, gestures 99.4% agree) and no established speed change. Alternating runs on identical crops. |
 
 ## RGB and shared-memory frame processing
 
@@ -130,6 +134,8 @@ I created a benchmarking script that automatically builds and compares FP16-capa
 
 Level 5 increased throughput by 6.9% for pose (146.8 → 157.0 qps) while reducing mean latency by 0.407 ms (5.7%). For detection, throughput increased by 8.9% (155.4 → 169.2 qps) while mean latency decreased by 0.512 ms (7.5%). GPU mean inference time improved by 0.440 ms (6.5%) for pose and 0.525 ms (8.2%) for detection. These gains came at approximately 2.5× and 4.6× longer one-time build times, respectively. Both level 5 plans were selected by the comparison script. The [full benchmark note](tensorrt-builder-comparison.md) records the configuration and limits.
 
+**Follow-up, 2026-11-12.** The pose engine the stream actually loaded was not the level 5 plan: in alternating `trtexec` runs it took 8.12–8.14 ms of GPU compute per inference. Rebuilt at level 5, it took 6.53–6.55 ms. On the fixed replay recording it found the same people on 99.7% of frames and kept the same lock state on all of them, and the stream's mean GPU load fell from 43% to 34% at the same 29.1 FPS. The CPU, at about 80%, is now the tighter resource. One replay per engine; the [follow-up section](tensorrt-builder-comparison.md#follow-up-2026-11-12-the-pose-engine-the-stream-was-using) has the method and limits.
+
 ## Pose model as the person detector
 
 The stream used to find people with YOLO26s segmentation, then ran a second DeepStream pass with YOLO26s pose on each person. Profiling put that at about 25 ms of GPU time per frame. The pose model's own output rows already hold each person's box and 17 keypoints, so I made it the only person detector. The stream now decodes the keypoints from the raw output tensor and matches them to each tracked detection.
@@ -145,3 +151,13 @@ Keypoints for the same person in the same frame differed by a median 0.4% of the
 ## Camera tilt loop
 
 The camera's tilt servo keeps the person vertically centred, but a tilt move only shows up in a later frame. With one detector pass, frames stopped queueing in the pipeline. In flights, a frame reached the tilt decision in 35–43 ms (p50) instead of 202 ms, and the whole loop delay measured 0.24–0.27 s instead of 0.63 s. The delay still makes a controller that keeps correcting what it sees overshoot and hunt. So I added a Smith predictor: each frame, the controller subtracts the tilt it has already commanded but the frame cannot show yet. In simulation, that stopped twice-as-fast settings from hunting, and in four flights the person was more than 0.15 of the frame off centre in 1.3–3.4% of frames, against 5.3% before. These are separate flights in different places, so the comparisons are observational. The [camera tilt loop note](camera-tilt-loop.md) has the per-session timings, the simulation and the limits.
+
+## Recording at 1080p: overlays drawn afterwards
+
+At 1080p 30 FPS, drawing the overlay inside the recorder (about 15 ms per frame) left it short of its 33 ms frame budget, on a CPU already about 80% busy, and it dropped 67 frames on the fixed replay clip. The recorder now saves the clean frame and writes a data file with one line per frame, holding the tracks, poses, hand results and settings the overlays are drawn from. A render tool, also started from the recordings page, draws any overlay style onto a copy. Drops fell to 2, both at startup, and the data file adds about 6.5 MB per minute to 90 MB of video.
+
+Because the data file records which frame each hand result came from, renders put hands back on that frame. Drawn live, they were 182 ms old at the median, because MediaPipe on the CPU returns about 9 results per second. The same work fixed the livestream's rate limit, which delivered 14.5–14.8 FPS at a setting of 20, and now delivers 19.8–20.0. These are single runs on the bench and nothing has been flown with this recording mode yet. The [recording note](recording-and-overlays.md) has the configurations, the overlay design and the limits.
+
+## MediaPipe 1.2.3
+
+MediaPipe 1.x again ships Linux aarch64 wheels, so I compared 1.2.3 with 0.10.18 on 900 identical hand crops in alternating runs. Landmarks differed by 0.22 px at the median and gesture labels agreed on 99.4% of crops. 1.2.3 was 6–24 ms per call faster, but the gap shrank each pair, so the speed difference is not established. On the replay, hand rate and hand lag were the same. I adopted it for support, not for speed: the hand lag comes from running the models on the CPU. The [comparison note](mediapipe-version-comparison.md) has the details.

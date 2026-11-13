@@ -2,7 +2,7 @@
 
 I'm building a drone that flies by hand gesture, locks onto its pilot, and keeps them framed with its pan-tilt-zoom camera. Detection, tracking, gesture recognition, camera control and flight commands all run on board, on a Jetson Orin Nano connected to a Pixhawk 6C flight controller running ArduCopter.
 
-I wrote the software and fly the test flights. The application repository is private; this repository holds the write-ups, measurements and clips. Since May 2026 the application has grown to 254 commits and about 1,400 automated tests.
+I wrote the software and fly the test flights. The application repository is private; this repository holds the write-ups, measurements and clips. Since May 2026 the application has grown to 261 commits and about 1,430 automated tests.
 
 [What it does](#what-it-does) · [How it works](#how-it-works) · [Engineering highlights](#engineering-highlights) · [How I work](#how-i-work) · [Status](#status)
 
@@ -12,7 +12,7 @@ https://github.com/user-attachments/assets/c954f707-9052-458e-8af9-3767928d823a
 
 ## What it does
 
-All clips are from flights on 2026-10-28, with the stream's overlays: the top banner shows the current command and the speed sent to the drone, and the bottom-left label shows the person lock.
+All clips are from flights on 2026-10-28, with the stream's overlays at the time: the top banner shows the current command and the speed sent to the drone, and the bottom-left label shows the person lock.
 
 <table>
 <tr>
@@ -34,7 +34,7 @@ All clips are from flights on 2026-10-28, with the stream's overlays: the top ba
 - **Follow mode.** Two thumbs up start follow mode. The drone flies forward or backward to keep the pilot at the distance they were when it started, while auto yaw turns to keep them centred.
 - **Keeps the pilot framed.** The tilt servo keeps the pilot vertically centred and turns against the drone's pitch like a gimbal. Auto zoom keeps the pilot at a set size in the frame, and a measured zoom-to-focus map keeps the image sharp.
 - **Voice control (work in progress).** A first version works: spoken or typed commands go to a local Qwen model running under `llama.cpp` on the Jetson's GPU, which turns them into the same commands as gestures, and Piper speaks the replies. Next I'm building an iOS app that connects to Meta smart glasses, so I can talk to the drone and hear its replies through the glasses while I fly.
-- **Browser control.** A web page shows the live annotated stream, switches stream profiles, and plays back recordings with the overlays.
+- **Browser control.** A web page shows the live annotated stream, switches stream profiles, and plays back recordings. Recordings are saved clean with a per-frame data file, and the recordings page draws overlays onto a copy: a presentation style for sharing, or one with a debug telemetry layer (tracking scores, eye gate, gestures, tilt, zoom, focus, frame rates).
 
 **Safety.** Gesture and voice commands go through one command router. Movement is only sent while a recent Pixhawk heartbeat reports GUIDED mode and the drone is armed; switching the flight mode on the radio ends gesture control at once. Motion output can also be switched off with a stream profile.
 
@@ -49,7 +49,8 @@ Arducam 12 MP pan-tilt-zoom camera (CSI)
   -> command router  <- voice: local Qwen (separate process; in progress)
   -> MAVLink, GUIDED only -> Pixhawk 6C / ArduCopter 4.6
   -> camera controller over I2C: tilt, zoom, focus
-  -> browser MJPEG stream, recordings with overlays
+  -> browser MJPEG stream, 720p 20 FPS, with overlays
+  -> clean 1080p 30 FPS recording + per-frame data file; overlays rendered afterwards
 ```
 
 Work that can block or crash runs in its own process: MediaPipe, recording, the voice model and speech. A supervisor restarts the video process if frames stop arriving. The pipeline holds the camera's 30 FPS in flight.
@@ -59,13 +60,13 @@ Work that can block or crash runs in its own process: MediaPipe, recording, the 
 | Computer | NVIDIA Jetson Orin Nano developer kit (8 GB) |
 | Flight controller | Pixhawk 6C, ArduCopter 4.6.3 |
 | Camera | Arducam 12MP 477P pan-tilt-zoom camera over CSI; tilt servo, zoom and focus motors share one I2C controller |
-| Software | Python, DeepStream 7.1, TensorRT, GStreamer, NvDCF tracker, MediaPipe, MAVLink (pymavlink), `llama.cpp`, Piper |
+| Software | Python, JetPack 7.2 with DeepStream 9.1 and TensorRT 10.16, GStreamer, NvDCF tracker, MediaPipe, MAVLink (pymavlink), `llama.cpp`, Piper |
 
 <img width="487" height="275" alt="Parts used to build the drone" src="https://github.com/user-attachments/assets/5c6273e2-32c8-41bb-ae67-dcec354ec745" />
 
 ### Code structure
 
-The application is one Python package of about 33,000 lines, with 16,700 lines of tests, split by responsibility:
+The application is one Python package of about 35,000 lines, with 17,500 lines of tests, split by responsibility:
 
 | Package | What it owns |
 | --- | --- |
@@ -74,7 +75,7 @@ The application is one Python package of about 33,000 lines, with 16,700 lines o
 | `commands` | Mapping gestures to commands |
 | `flight` | MAVLink link, command router and controller, follow mode, auto yaw and heading aim, flight-mode checks, Pixhawk log download |
 | `camera` | The camera controller (tilt, zoom, focus over I2C), auto tilt and stabilization, focus maps, image settings, bench calibration tools |
-| `recording` | Segmented recording in its own process, overlays |
+| `recording` | Segmented recording in its own process, the per-frame data file, overlay styles and the render tool |
 | `web` | Browser stream and control page |
 | `audio` | Voice command parsing |
 | `sim` | Closed-loop tilt, yaw and follow simulations that run the drone's own controllers |
@@ -102,6 +103,8 @@ Each of these started from a flight recording or a measurement, and most were ch
 
 - **One model pass instead of two.** The stream found people with a segmentation model, then ran a pose model on each person. The pose model already outputs each person's box, so I made it the only detector: **38.6 → 58.7 FPS** on a fixed replay clip, with the same people found and the lock held as well. In later flights, a frame reached the tilt decision in 35–43 ms instead of 202 ms. [Note](notes/pose-model-person-detector.md)
 - **From 8.5 to 30 FPS.** Moving YOLO inference from the CPU to a TensorRT FP16 engine took the first camera stream from 8.5 to the camera's 30 FPS limit. Later work moved detection into DeepStream and cut per-frame CPU work with Nsight Systems: RGB frames end to end, shared memory instead of JPEG for the hand worker, and one direct GPU-to-NumPy copy (callback p95 19.1 → 13.4 ms).
+- **Recording at 1080p without dropping frames.** Drawing overlays inside the recorder at 1080p 30 FPS left it short of its 33 ms frame budget, and it dropped 67 frames on the replay clip. It now records the clean frame and writes a small data file, one line per frame, with what the overlays are drawn from; overlays are rendered onto a copy afterwards, in any style. Drops fell to 2, both at startup, and renders put each hand result on the frame it came from instead of 182 ms late. (Bench-tested; not flown yet.) [Note](notes/recording-and-overlays.md)
+- **Checking what was actually deployed.** A September benchmark picked TensorRT optimization level 5 for the pose model, but the engine the stream loaded took 8.1 ms per inference, not 6.5. Rebuilt at level 5, it cut the stream's GPU load from 43% to 34% with essentially the same detections. The CPU, at about 80%, is the tighter resource. [Note](notes/tensorrt-builder-comparison.md#follow-up-2026-11-12-the-pose-engine-the-stream-was-using)
 - **A crash that wasn't the model.** The video pipeline crashed at random. I matched DeepStream buffer-copy failures to kernel GPU memory faults and CUDA error 700, ruled out the TensorRT engines by rebuilding them, and stopped it by moving the affected copies to the Jetson's VIC hardware (`copy-hw=2`) on that JetPack release.
 - **Keeping the language model out of the video path.** Loading Qwen inside the DeepStream process destabilized it, so it runs as a separate warm service. GPU offload cut one command's response from 14.3 s to 4.5 s.
 
@@ -119,13 +122,14 @@ The [performance page](notes/performance.md) has the full measurements, Nsight t
 
 | Working in flight | Built, not flown yet | Next |
 | --- | --- | --- |
-| Person lock with ReID, gesture commands, Movement mode, follow mode, auto tilt with the Smith predictor, 30 FPS pipeline | Tilt priority between zoom steps, zoom hold during fast pitch | Voice control through an iOS app and Meta smart glasses, follow feed-forward from the pilot's speed, two-person lock tests in flight, longer-range tests |
+| Person lock with ReID, gesture commands, Movement mode, follow mode, auto tilt with the Smith predictor, 30 FPS pipeline | Tilt priority between zoom steps, zoom hold during fast pitch, clean 1080p recording with a frame data file, presentation and telemetry overlays | Voice control through an iOS app and Meta smart glasses, follow feed-forward from the pilot's speed, two-person lock tests in flight, longer-range tests |
 
 ## Notes
 
 - [Performance engineering](notes/performance.md): all measured results, with Nsight timelines
 - [Camera tilt loop](notes/camera-tilt-loop.md) and [pose model as the person detector](notes/pose-model-person-detector.md)
 - [RGB and shared memory](notes/rgb-shared-memory-comparison.md), [direct-to-NumPy copy](notes/direct-numpy-copy-comparison.md), [TensorRT level 3 versus 5](notes/tensorrt-builder-comparison.md)
+- [Clean 1080p recording with a frame data file](notes/recording-and-overlays.md) and [MediaPipe 0.10.18 versus 1.2.3](notes/mediapipe-version-comparison.md)
 - [Optimization case studies](notes/case-studies.md), the [May field log](notes/field-log.md) and the [later stream log](notes/recent-stream-log.md)
 
 Measurements come from one device and are often single runs; each note gives its limits. Commands in the logs show the configuration at the time and may not match the current application. Model weights, TensorRT plans, raw recordings and device configuration are not in this repository, and local account paths and LAN addresses in the logs were replaced with documentation examples.
