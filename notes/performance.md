@@ -22,6 +22,7 @@ Measurements come from one Jetson Orin Nano. Many are short operational samples 
 | The livestream delivered fewer frames than its setting | Replaced the skip-if-too-soon rate limit with a fixed schedule | At a setting of 20: **14.5–14.8 → 19.8–20.0 FPS** delivered. Short samples. |
 | The hand worker was on MediaPipe 0.10.18 (2024) | Upgraded to MediaPipe 1.2.3 | No change in results (landmarks 0.22 px apart, gestures 99.4% agree) and no established speed change. Alternating runs on identical crops. |
 | The on-board language model for text commands: Qwen3.5-4B or Gemma 4 E2B | Benchmarked both on 95 labeled sentences, after making both fast (saved prompt state, top-token grammar check); chose Gemma 4 E2B | Median **1.72 → 1.13 s** per command, slowest 1 in 20 **2.80 → 1.72 s**; GPU memory **≈3.1 → ≈1.9 GiB**; accuracy 91.6% → 95.8%. Three runs each, stream off; Gemma still has one false follow. |
+| Status questions went to the wrong answer (or to the follow command) when they fell between the model's four inspect actions and the keyword topics | One `status` action whose reading names the model picks under the output grammar; code fetches and says the numbers | Status questions exactly right **26 → 30 of 34**; unwanted follow commands **4 → 0**; commands 92 → 91 of 98; median **1.18 → 1.10 s**. Three runs each, identical answers every run, stream off. |
 
 ## RGB and shared-memory frame processing
 
@@ -168,3 +169,18 @@ MediaPipe 1.x again ships Linux aarch64 wheels, so I compared 1.2.3 with 0.10.18
 The drone turns typed commands into the same commands as gestures with a small language model on the Jetson's GPU. I compared Qwen3.5-4B with Gemma 4 E2B on 95 hand-labeled sentences, three fresh-process runs each in alternating order. First I fixed two slowdowns that had nothing to do with the models: Qwen3.5's hybrid layers could not reuse the cached instructions, so the parser now restores a saved state, and llama-cpp-python checked every one of 248,320 tokens against the JSON grammar at each step, so the parser now checks the top token first. That took Qwen3.5 from about 5 s to 1.8 s per command.
 
 Gemma 4 E2B then answered in **1.13 s** at the median against 1.72 s (slowest 1 in 20: 1.72 against 2.80 s) and needs about **1.9 GiB** on the GPU against 3.1 GiB. Its file is bigger, but most of it is a per-layer embedding table that llama.cpp leaves memory-mapped instead of copying to the GPU. It was also more accurate, 95.8% against 91.6%, though "fly over the crowd as low as you can" came out as follow in every run. I made Gemma the default and kept Qwen3.5 installed. The [comparison note](text-command-model-comparison.md) has the method, every miss and the limits.
+
+## Status questions: the model picks the readings, code says them
+
+The voice model answered questions about the drone through four "inspect" actions followed by keyword patterns. "How is the GPS?" got "I could not confidently recognize that command", "how many amps are we drawing" got the whole RAM and CPU report, and "are you following me right now?" was sent to the follow command, which turns follow mode on. Handing the model all the telemetry was not the answer either. Earlier tests had shown it reads numbers out badly ("3.905666666666667 V", about 7 s), and the telemetry snapshot alone is about half the model's context.
+
+So the model now answers a status question with one `status` action and a list of reading names (battery, gps, armed, motors, altitude, people, scene, ...). The JSON-schema grammar limits the list to 16 known names, while commands keep their old output shape at no extra token cost. Code reads each reading live and writes the sentence. To score it, the comparison tool runs each code version's own routing with recording stand-ins for the answer functions. A status question is right only when exactly the asked readings would be answered.
+
+On 132 hand-labeled sentences (34 status questions), three fresh-process runs per version, Gemma 4 E2B, stream off:
+- status questions exactly right: **26 → 30**;
+- unwanted follow commands: **4 → 0**;
+- commands: 92 → 91 of 98;
+- median: **1.18 → 1.10 s** (status replies are shorter).
+
+A follow-up renamed the `lock` field to `person_lock`, because "GPS lock" in the GPS description had pulled it into satellite questions. It fixed those and scored 2 sentences better overall, but it broke one question that was right in every earlier run, which a rule set before the runs forbids, so it was not adopted. The [note](status-question-routing.md) has the method, every miss and the limits.
+
