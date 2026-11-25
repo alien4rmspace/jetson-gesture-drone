@@ -1,0 +1,362 @@
+{
+ "description": "Recording playback in a browser: the recorder's fragmented MP4 against the same recording remuxed with one index at the front. Served by the real recordings HTTP handler (HTTP/1.0) on the Jetson to a local headless browser through an emulated link: one 40 Mbit/s token bucket shared by all connections plus 5 ms before each response. start = setting the video source to the first 'playing' event. seek = setting currentTime to 225 s to playback running again. Run order A B B A A B per browser, fresh browser profile per run, page cache warmed by one untimed read of both files.",
+ "date": "2026-11-20",
+ "timezone": "PST",
+ "classification": "controlled for the two desktop browser engines on an emulated link; the owner's devices and the real Wi-Fi link were not tested",
+ "code": "recordings handler from private application repository e0d3116 plus the uncommitted details cache (does not touch video sending); remux committed as dbcb508",
+ "media": {
+  "recording": "5-minute 1920x1080 H.264 recording at 30 FPS, 446 MB (about 11.9 Mbit/s), 301 one-second fragments, index (mfra) at the end",
+  "fragmented_sha256_prefix": "dc496b50",
+  "remuxed_sha256_prefix": "eb8b213e",
+  "remux": "qtdemux ! h264parse ! mp4mux faststart=true, no re-encoding, 1.4 s for 446 MB in the experiment",
+  "correctness": "both decode to the same 9006 frames (MD5 of every decoded frame, 0 mismatched); identical per-frame timestamps, durations, sizes and key-frame flags"
+ },
+ "browsers": {
+  "firefox": "Firefox 153 headless, Selenium",
+  "chromium": "headless Chromium via Playwright, version not recorded"
+ },
+ "excluded_runs": "three pre-run trials (fragmented and remuxed in Firefox, fragmented in Chromium), run while the frame check used the CPU and before a harness statistics fix; their values matched the measured runs",
+ "summary": {
+  "firefox / fragmented (as recorded)": {
+   "start_s": {
+    "median": 0.145,
+    "min": 0.139,
+    "max": 0.174,
+    "n": 3
+   },
+   "start_requests": {
+    "median": 4,
+    "min": 4,
+    "max": 4,
+    "n": 3
+   },
+   "seek_to_225s_resume_s": {
+    "median": 5.4,
+    "min": 5.378,
+    "max": 5.41,
+    "n": 3
+   },
+   "seek_requests": {
+    "median": 192,
+    "min": 192,
+    "max": 193,
+    "n": 3
+   }
+  },
+  "firefox / index at the front (remuxed)": {
+   "start_s": {
+    "median": 0.081,
+    "min": 0.067,
+    "max": 0.084,
+    "n": 3
+   },
+   "start_requests": {
+    "median": 1,
+    "min": 1,
+    "max": 1,
+    "n": 3
+   },
+   "seek_to_225s_resume_s": {
+    "median": 0.969,
+    "min": 0.968,
+    "max": 0.974,
+    "n": 3
+   },
+   "seek_requests": {
+    "median": 1,
+    "min": 1,
+    "max": 1,
+    "n": 3
+   }
+  },
+  "chromium / fragmented (as recorded)": {
+   "start_s": {
+    "median": 5.386,
+    "min": 5.382,
+    "max": 5.398,
+    "n": 3
+   },
+   "start_requests": {
+    "median": 303,
+    "min": 303,
+    "max": 303,
+    "n": 3
+   },
+   "seek_to_225s_resume_s": {
+    "median": 0.916,
+    "min": 0.911,
+    "max": 0.924,
+    "n": 3
+   },
+   "seek_requests": {
+    "median": 1,
+    "min": 1,
+    "max": 1,
+    "n": 3
+   }
+  },
+  "chromium / index at the front (remuxed)": {
+   "start_s": {
+    "median": 0.096,
+    "min": 0.096,
+    "max": 0.097,
+    "n": 3
+   },
+   "start_requests": {
+    "median": 1,
+    "min": 1,
+    "max": 1,
+    "n": 3
+   },
+   "seek_to_225s_resume_s": {
+    "median": 0.928,
+    "min": 0.925,
+    "max": 0.928,
+    "n": 3
+   },
+   "seek_requests": {
+    "median": 1,
+    "min": 1,
+    "max": 1,
+    "n": 3
+   }
+  }
+ },
+ "runs": [
+  {
+   "order": 1,
+   "browser": "firefox",
+   "variant": "fragmented (as recorded)",
+   "start_s": 0.139,
+   "start_requests": 4,
+   "start_MB": 0.67,
+   "seek_to_225s_resume_s": 5.378,
+   "seek_requests": 193,
+   "seek_MB": 17.99,
+   "requests_total": 199,
+   "MB_total": 90.0,
+   "duration_reported_s": 300.2,
+   "media_error": null,
+   "waiting_events": 2
+  },
+  {
+   "order": 2,
+   "browser": "firefox",
+   "variant": "index at the front (remuxed)",
+   "start_s": 0.084,
+   "start_requests": 1,
+   "start_MB": 0.44,
+   "seek_to_225s_resume_s": 0.974,
+   "seek_requests": 1,
+   "seek_MB": 4.67,
+   "requests_total": 2,
+   "MB_total": 76.4,
+   "duration_reported_s": 300.2,
+   "media_error": null,
+   "waiting_events": 2
+  },
+  {
+   "order": 3,
+   "browser": "firefox",
+   "variant": "index at the front (remuxed)",
+   "start_s": 0.081,
+   "start_requests": 1,
+   "start_MB": 0.39,
+   "seek_to_225s_resume_s": 0.968,
+   "seek_requests": 1,
+   "seek_MB": 4.64,
+   "requests_total": 2,
+   "MB_total": 76.4,
+   "duration_reported_s": 300.2,
+   "media_error": null,
+   "waiting_events": 2
+  },
+  {
+   "order": 4,
+   "browser": "firefox",
+   "variant": "fragmented (as recorded)",
+   "start_s": 0.145,
+   "start_requests": 4,
+   "start_MB": 0.53,
+   "seek_to_225s_resume_s": 5.4,
+   "seek_requests": 192,
+   "seek_MB": 18.19,
+   "requests_total": 198,
+   "MB_total": 90.0,
+   "duration_reported_s": 300.2,
+   "media_error": null,
+   "waiting_events": 2
+  },
+  {
+   "order": 5,
+   "browser": "firefox",
+   "variant": "fragmented (as recorded)",
+   "start_s": 0.174,
+   "start_requests": 4,
+   "start_MB": 0.67,
+   "seek_to_225s_resume_s": 5.41,
+   "seek_requests": 192,
+   "seek_MB": 17.99,
+   "requests_total": 198,
+   "MB_total": 90.0,
+   "duration_reported_s": 300.2,
+   "media_error": null,
+   "waiting_events": 2
+  },
+  {
+   "order": 6,
+   "browser": "firefox",
+   "variant": "index at the front (remuxed)",
+   "start_s": 0.067,
+   "start_requests": 1,
+   "start_MB": 0.38,
+   "seek_to_225s_resume_s": 0.969,
+   "seek_requests": 1,
+   "seek_MB": 4.65,
+   "requests_total": 2,
+   "MB_total": 76.4,
+   "duration_reported_s": 300.2,
+   "media_error": null,
+   "waiting_events": 2
+  },
+  {
+   "order": 7,
+   "browser": "chromium",
+   "variant": "fragmented (as recorded)",
+   "start_s": 5.382,
+   "start_requests": 303,
+   "start_MB": 16.17,
+   "seek_to_225s_resume_s": 0.916,
+   "seek_requests": 1,
+   "seek_MB": 4.33,
+   "requests_total": 304,
+   "MB_total": 91.0,
+   "duration_reported_s": 300.2,
+   "media_error": null,
+   "waiting_events": 2
+  },
+  {
+   "order": 8,
+   "browser": "chromium",
+   "variant": "index at the front (remuxed)",
+   "start_s": 0.096,
+   "start_requests": 1,
+   "start_MB": 0.46,
+   "seek_to_225s_resume_s": 0.928,
+   "seek_requests": 1,
+   "seek_MB": 4.33,
+   "requests_total": 2,
+   "MB_total": 74.4,
+   "duration_reported_s": 300.2,
+   "media_error": null,
+   "waiting_events": 2
+  },
+  {
+   "order": 9,
+   "browser": "chromium",
+   "variant": "index at the front (remuxed)",
+   "start_s": 0.097,
+   "start_requests": 1,
+   "start_MB": 0.46,
+   "seek_to_225s_resume_s": 0.925,
+   "seek_requests": 1,
+   "seek_MB": 4.36,
+   "requests_total": 2,
+   "MB_total": 74.4,
+   "duration_reported_s": 300.2,
+   "media_error": null,
+   "waiting_events": 2
+  },
+  {
+   "order": 10,
+   "browser": "chromium",
+   "variant": "fragmented (as recorded)",
+   "start_s": 5.386,
+   "start_requests": 303,
+   "start_MB": 16.14,
+   "seek_to_225s_resume_s": 0.924,
+   "seek_requests": 1,
+   "seek_MB": 4.36,
+   "requests_total": 304,
+   "MB_total": 90.4,
+   "duration_reported_s": 300.2,
+   "media_error": null,
+   "waiting_events": 2
+  },
+  {
+   "order": 11,
+   "browser": "chromium",
+   "variant": "fragmented (as recorded)",
+   "start_s": 5.398,
+   "start_requests": 303,
+   "start_MB": 16.15,
+   "seek_to_225s_resume_s": 0.911,
+   "seek_requests": 1,
+   "seek_MB": 4.31,
+   "requests_total": 304,
+   "MB_total": 90.6,
+   "duration_reported_s": 300.2,
+   "media_error": null,
+   "waiting_events": 2
+  },
+  {
+   "order": 12,
+   "browser": "chromium",
+   "variant": "index at the front (remuxed)",
+   "start_s": 0.096,
+   "start_requests": 1,
+   "start_MB": 0.48,
+   "seek_to_225s_resume_s": 0.928,
+   "seek_requests": 1,
+   "seek_MB": 4.33,
+   "requests_total": 2,
+   "MB_total": 74.4,
+   "duration_reported_s": 300.2,
+   "media_error": null,
+   "waiting_events": 2
+  }
+ ],
+ "library_conversion": {
+  "date": "2026-11-21",
+  "files": 271,
+  "size_GB": 49.0,
+  "elapsed_s": 398,
+  "priority": "nice 19, idle I/O class, stream off",
+  "remuxed_and_verified": 261,
+  "refused_left_unchanged": 10,
+  "refused_reason": "all 10 are renders from October whose last 1-2 samples are zero-filled or past the end of the file (cut-off renders); the remux held 1-2 fewer samples, so the sample check refused them",
+  "spot_check": "one original recording copied before conversion: 841 of 841 decoded frames identical after",
+  "renders": "10 s renders from the remuxed and the fragmented recording, with the same saved motion: 300 of 300 frames identical, in one piece and in two"
+ },
+ "recordings_list": {
+  "description": "Time for the recordings service's first video list after a start, 358 videos (54 unreadable by OpenCV). Before the change the service read each video's details with OpenCV on every start; after it, it reads them from a saved details file keyed by size and modification time. Single timings unless a count is given.",
+  "before": {
+   "cold_disk_stream_off_s": 32.13,
+   "files_in_page_cache_s": 15.78,
+   "probe_ms_per_readable_file": 53.5,
+   "probe_sample_files": 40,
+   "app_request_limit_s": 8
+  },
+  "after": {
+   "first_list_s": [
+    0.06,
+    0.06
+   ],
+   "details_file_load_ms": [
+    32,
+    33
+   ],
+   "through_website_proxy_after_start_s": 0.07,
+   "after_library_remux": {
+    "refresh_all_358_s": 3.4,
+    "next_start_first_list_s": 0.09
+   }
+  },
+  "code": "private application repository commit 7d1654b"
+ },
+ "recordings_service_autostart": {
+  "code": "private application repository commit 58839c1",
+  "idle_cost": "113 MB resident with 358 videos listed, no CPU over 30 s (one test copy)",
+  "observed": "after the Jetson's next boot (2026-11-24) the recordings service was running, started in the same second as the control server"
+ }
+}
