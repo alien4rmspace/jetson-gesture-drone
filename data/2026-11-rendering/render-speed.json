@@ -1,0 +1,187 @@
+{
+ "description": "Derived from the private experiment report render-speed-20261119 (2026-11-19, PST). Part 1: stage breakdown of the render tool before the change (a re-implementation of the render loop with timers, same functions, two runs per mode in AB/BA order). Part 2: wall time of the real render command, baseline vs five changes together. Telemetry overlay style, tilt smoothing on, 1920x1080 30 fps, x264 ultrafast 12 Mbps 4 threads, nice 10, stream off. Governor not pinned.",
+ "date": "2026-11-19",
+ "timezone": "PST",
+ "platform": {
+  "board": "Jetson Orin Nano 8 GB developer kit (Super)",
+  "power_mode": "MAXN_SUPER",
+  "cpu_cores": 6,
+  "governor": "schedutil, not pinned; mean CPU clock 1.1-1.7 GHz per stage-breakdown run",
+  "opencv": "4.6.0 (TBB, no CUDA)",
+  "video_encoder": "x264 in software (no hardware encoder on this board)"
+ },
+ "input": {
+  "what": "30 s span (115-145 s, 900 frames) of a 2026-11-17 flight recording with its frame data file",
+  "sha256_prefix_in_report": "8bb2d27282079c7f",
+  "note": "the report kept only a 16-character prefix; the file was later remuxed in place (MP4 index moved to the front) and no longer hashes to it"
+ },
+ "stage_breakdown_before": {
+  "code": "commit 817da2c render and smoothing functions",
+  "fps_by_mode_run1_run2": {
+   "measure pass only": [
+    50.3,
+    50.1
+   ],
+   "render, telemetry, encoding": [
+    26.5,
+    24.3
+   ],
+   "render, telemetry, no encoding": [
+    30.8,
+    30.9
+   ],
+   "render, presentation, encoding": [
+    29.7,
+    35.8
+   ],
+   "render, presentation, no encoding": [
+    39.7,
+    45.9
+   ],
+   "encoder only, RGB -> GStreamer videoconvert -> x264": [
+    31.7,
+    33.1
+   ],
+   "encoder only, I420 from OpenCV -> x264": [
+    111.6,
+    113.4
+   ]
+  },
+  "ms_per_frame_run2": {
+   "decode": 6.2,
+   "frame shift (warp)": "9-12.7",
+   "draw presentation": 4.8,
+   "draw telemetry": "14-16",
+   "write (copy + wait for encoder)": "3.5-3.9",
+   "measure: decode": 6.0,
+   "measure: resize+grey+mask": 5.4,
+   "measure: corners": 3.8,
+   "measure: Lucas-Kanade": 3.8,
+   "measure: RANSAC": 0.4
+  },
+  "process_cpu_cores_of_6": "2.3-3.6",
+  "excluded": "the first 2 render runs overlapped another full test-suite run (load 4.4-6.5) and were excluded"
+ },
+ "ab": {
+  "baseline_A": "commit 9913ceb, run from a detached worktree",
+  "variant_B": "the working tree that became commit 33c15a2 (9913ceb plus the five changes)",
+  "changes_together": [
+   "RGB to I420 with OpenCV on a writer thread (BT.709 limited range above 576 lines, BT.601 below)",
+   "decoding on a reader thread",
+   "measured motion saved beside the recording and reused",
+   "cheaper measuring: grey before shrinking, corners followed between frames",
+   "up to 3 consecutive pieces in separate processes, joined without re-encoding; 60 warm-up frames per later piece"
+  ],
+  "span_900_frames": {
+   "order": [
+    "A",
+    "Bf",
+    "Br",
+    "Br",
+    "Bf",
+    "A",
+    "A",
+    "Bf",
+    "Br"
+   ],
+   "A_s": [
+    53.6,
+    54.6,
+    54.8
+   ],
+   "B_first_render_s": [
+    28.3,
+    36.6,
+    32.5
+   ],
+   "B_re_render_s": [
+    20.9,
+    21.2,
+    24.4
+   ],
+   "means_s": {
+    "A": 54.3,
+    "B_first_render": 32.5,
+    "B_re_render": 22.2
+   },
+   "medians_s": {
+    "A": 54.6,
+    "B_first_render": 32.5,
+    "B_re_render": 21.2
+   },
+   "speed_up_from_means": {
+    "first_render": 1.7,
+    "re_render": 2.4
+   },
+   "relative_change_wall_time_pct": {
+    "first_render": -40.2,
+    "re_render": -59.2
+   }
+  },
+  "whole_recording_9010_frames": {
+   "order": [
+    "Bf",
+    "Br",
+    "A"
+   ],
+   "A_s": 444.5,
+   "B_first_render_s": 250.1,
+   "B_re_render_s": 208.3,
+   "runs_each": 1,
+   "speed_up": {
+    "first_render": 1.8,
+    "re_render": 2.1
+   }
+  },
+  "board_temperature_c": "48.6 -> 55 over the session; later B first-render runs slower",
+  "correctness": [
+   {
+    "criterion": "same number of output frames; output decodes end to end",
+    "result": "pass (900, 9010; timestamps every 33.3 ms, 0-300.3 s)"
+   },
+   {
+    "criterion": "pieces vs one pass: per-frame PSNR >= 40 dB between encodes",
+    "result": "fail as written: 33.7 dB min, 36.3 median; two lossy encodes differ this much on their own (criterion mis-set)"
+   },
+   {
+    "criterion": "replacement, chosen after that failure: frames before encoding, one pass vs 3 pieces, same motion",
+    "result": "900 of 900 byte-identical"
+   },
+   {
+    "criterion": "new vs old measuring: per-frame vertical motion difference median <= 0.2 px",
+    "result": "pass (0.03-0.14 px)"
+   },
+   {
+    "criterion": "same, p99 <= 2 px",
+    "result": "fail on one of three clips (1.1 / 1.9 / 3.2 px)"
+   },
+   {
+    "criterion": "smoothed paths differ by <= 3 px",
+    "result": "fail (up to 39 px, on a few 40-80 px/frame smeared frames)"
+   },
+   {
+    "criterion": "outcome: changes in vertical motion over 5 px within 1 percentage point",
+    "result": "pass (6.1 -> 5.7%, 2.7 -> 3.5%, 0.6 -> 0.7%)"
+   },
+   {
+    "criterion": "full test suite",
+    "result": "2291 passed"
+   }
+  ],
+  "attribution_from_stage_timings": {
+   "I420 conversion cpu_ms_per_frame": [
+    30,
+    11
+   ],
+   "measuring_fps": [
+    50,
+    71
+   ],
+   "3 pieces vs 1 with motion saved, s (one run each)": [
+    20.7,
+    27.0
+   ]
+  },
+  "remaining_limit": "CPU: about 111 ms of CPU per frame in one process; cv2.warpAffine 37-41 ms CPU (8-10 ms wall on 6 threads); CPU summed across the parallel worker processes was not measured"
+ }
+}
