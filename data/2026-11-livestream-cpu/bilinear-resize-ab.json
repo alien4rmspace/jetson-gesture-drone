@@ -1,0 +1,412 @@
+{
+ "description": "Livestream 1080p->720p shrink by area averaging (A) against bilinear (B), plus a control (C) that imports the bilinear code the same way the A runs imported theirs. Benchmark replay, no Nsight.",
+ "date": "2026-11-18 (PST)",
+ "input": {
+  "clip_sha256": "e93036e39c708074d10bea26c52e7a7da05dc96c234f0e38e71cd3cd2e136800",
+  "format": "1920x1080 H.264 flight recording, replayed at 30 FPS",
+  "warmup_frames": 300,
+  "measured_frames": 1200
+ },
+ "work_enabled": "default profile with motion output off, recording on (1080p x264 inside the main process), livestream encode worker on with overlays drawn by the browser (so it resizes, serializes frame data and JPEG-encodes); TensorRT hand worker. No livestream viewer was connected.",
+ "method": "CPU time from /proc/<pid>/stat each second for the main process and the livestream encode worker (the stream's only multiprocessing child), and per thread of the main process in the control and clocks batches. Window = the seconds the worker was more than 15% busy, minus the first and last second. tegrastats at 1 s in the clocks batch. Livestream frames encoded per run were not counted.",
+ "failed_runs": [
+  {
+   "run": "A1 and A2 of the first batch",
+   "exit_code": 1,
+   "reason": "the copied source tree looked for its configuration files next to the copy; fixed by linking the repository folders; kept, not analyzed"
+  }
+ ],
+ "single_core_microbenchmark": {
+  "conditions": "one thread pinned to one core at 1728 MHz, OpenCV 4.6, synthetic 1920x1080 frame; repetition count not recorded",
+  "resize_to_1280x720_area_ms": 20.9,
+  "resize_to_1280x720_bilinear_ms": 10.5,
+  "mean_abs_pixel_difference_of_255": 0.35,
+  "jpeg_q80_1280x720_ms": 7.9
+ },
+ "runs": [
+  {
+   "run": "B1",
+   "batch": "first batch (its A runs failed to start)",
+   "order_in_batch": 1,
+   "variant": "B: bilinear (INTER_LINEAR)",
+   "exit_code": 0,
+   "replay_valid": true,
+   "dropped_frames": 0,
+   "pipeline_fps": 29.34,
+   "window_s": 50.1,
+   "livestream_worker_percent_of_one_core": 64.7,
+   "livestream_worker_per_second_sd": 2.6,
+   "main_process_percent_of_one_core": 195.5,
+   "main_process_threads_percent_of_one_core": "not logged in this batch",
+   "recording": {
+    "bytes": 75398316,
+    "same_as_A3_after_first_276_bytes": true
+   }
+  },
+  {
+   "run": "B2",
+   "batch": "first batch (its A runs failed to start)",
+   "order_in_batch": 2,
+   "variant": "B: bilinear (INTER_LINEAR)",
+   "exit_code": 0,
+   "replay_valid": true,
+   "dropped_frames": 0,
+   "pipeline_fps": 29.33,
+   "window_s": 49.0,
+   "livestream_worker_percent_of_one_core": 65.1,
+   "livestream_worker_per_second_sd": 2.5,
+   "main_process_percent_of_one_core": 197.7,
+   "main_process_threads_percent_of_one_core": "not logged in this batch",
+   "recording": {
+    "bytes": 75398316,
+    "same_as_A3_after_first_276_bytes": true
+   }
+  },
+  {
+   "run": "A1",
+   "batch": "A/B batch",
+   "order_in_batch": 1,
+   "variant": "A: area averaging (INTER_AREA)",
+   "exit_code": 0,
+   "replay_valid": true,
+   "dropped_frames": 0,
+   "pipeline_fps": 29.2,
+   "window_s": 49.0,
+   "livestream_worker_percent_of_one_core": 82.1,
+   "livestream_worker_per_second_sd": 5.7,
+   "main_process_percent_of_one_core": 168.1,
+   "main_process_threads_percent_of_one_core": "not logged in this batch",
+   "recording": {
+    "bytes": 75398316,
+    "same_as_A3_after_first_276_bytes": true
+   }
+  },
+  {
+   "run": "B3",
+   "batch": "A/B batch",
+   "order_in_batch": 2,
+   "variant": "B: bilinear (INTER_LINEAR)",
+   "exit_code": 0,
+   "replay_valid": true,
+   "dropped_frames": 0,
+   "pipeline_fps": 29.36,
+   "window_s": 49.0,
+   "livestream_worker_percent_of_one_core": 62.7,
+   "livestream_worker_per_second_sd": 3.4,
+   "main_process_percent_of_one_core": 190.1,
+   "main_process_threads_percent_of_one_core": "not logged in this batch",
+   "recording": {
+    "bytes": 75398316,
+    "same_as_A3_after_first_276_bytes": true
+   }
+  },
+  {
+   "run": "B4",
+   "batch": "A/B batch",
+   "order_in_batch": 3,
+   "variant": "B: bilinear (INTER_LINEAR)",
+   "exit_code": 0,
+   "replay_valid": true,
+   "dropped_frames": 0,
+   "pipeline_fps": 29.33,
+   "window_s": 50.0,
+   "livestream_worker_percent_of_one_core": 62.5,
+   "livestream_worker_per_second_sd": 3.7,
+   "main_process_percent_of_one_core": 191.8,
+   "main_process_threads_percent_of_one_core": "not logged in this batch",
+   "recording": {
+    "bytes": 75398316,
+    "same_as_A3_after_first_276_bytes": true
+   }
+  },
+  {
+   "run": "A2",
+   "batch": "A/B batch",
+   "order_in_batch": 4,
+   "variant": "A: area averaging (INTER_AREA)",
+   "exit_code": 0,
+   "replay_valid": true,
+   "dropped_frames": 0,
+   "pipeline_fps": 29.22,
+   "window_s": 50.0,
+   "livestream_worker_percent_of_one_core": 85.0,
+   "livestream_worker_per_second_sd": 3.2,
+   "main_process_percent_of_one_core": 173.3,
+   "main_process_threads_percent_of_one_core": "not logged in this batch",
+   "recording": {
+    "bytes": 75398316,
+    "same_as_A3_after_first_276_bytes": true
+   }
+  },
+  {
+   "run": "C1",
+   "batch": "control batch",
+   "order_in_batch": 1,
+   "variant": "C: bilinear, imported from a copy like A (control)",
+   "exit_code": 0,
+   "replay_valid": true,
+   "dropped_frames": 0,
+   "pipeline_fps": 29.37,
+   "window_s": 49.1,
+   "livestream_worker_percent_of_one_core": 60.8,
+   "livestream_worker_per_second_sd": 2.3,
+   "main_process_percent_of_one_core": 187.0,
+   "main_process_threads_percent_of_one_core": {
+    "frames:src": 94.1,
+    "python": 51.6,
+    "rgb_queue:src": 16.7,
+    "record_queue:sr": 12.6,
+    "vpistrma9c99830": 4.3,
+    "multiqueue0:src": 2.6,
+    "stream_mux:src": 2.0
+   },
+   "recording": {
+    "bytes": 75398316,
+    "same_as_A3_after_first_276_bytes": true
+   }
+  },
+  {
+   "run": "B5",
+   "batch": "control batch",
+   "order_in_batch": 2,
+   "variant": "B: bilinear (INTER_LINEAR)",
+   "exit_code": 0,
+   "replay_valid": true,
+   "dropped_frames": 0,
+   "pipeline_fps": 29.35,
+   "window_s": 49.2,
+   "livestream_worker_percent_of_one_core": 59.7,
+   "livestream_worker_per_second_sd": 2.0,
+   "main_process_percent_of_one_core": 185.9,
+   "main_process_threads_percent_of_one_core": {
+    "frames:src": 93.8,
+    "python": 51.6,
+    "rgb_queue:src": 16.4,
+    "record_queue:sr": 12.3,
+    "vpistrmadc98f80": 4.2,
+    "multiqueue0:src": 2.6,
+    "stream_mux:src": 2.0
+   },
+   "recording": {
+    "bytes": 75398316,
+    "same_as_A3_after_first_276_bytes": true
+   }
+  },
+  {
+   "run": "B6",
+   "batch": "control batch",
+   "order_in_batch": 3,
+   "variant": "B: bilinear (INTER_LINEAR)",
+   "exit_code": 0,
+   "replay_valid": true,
+   "dropped_frames": 0,
+   "pipeline_fps": 29.35,
+   "window_s": 49.1,
+   "livestream_worker_percent_of_one_core": 60.2,
+   "livestream_worker_per_second_sd": 1.8,
+   "main_process_percent_of_one_core": 187.0,
+   "main_process_threads_percent_of_one_core": {
+    "frames:src": 94.5,
+    "python": 51.6,
+    "rgb_queue:src": 16.8,
+    "record_queue:sr": 12.4,
+    "vpistrm9dc98f80": 4.2,
+    "multiqueue0:src": 2.6,
+    "stream_mux:src": 2.0
+   },
+   "recording": {
+    "bytes": 75398344,
+    "same_as_A3_after_first_276_bytes": null,
+    "note": "28 bytes longer than A3; not compared"
+   }
+  },
+  {
+   "run": "C2",
+   "batch": "control batch",
+   "order_in_batch": 4,
+   "variant": "C: bilinear, imported from a copy like A (control)",
+   "exit_code": 0,
+   "replay_valid": true,
+   "dropped_frames": 0,
+   "pipeline_fps": 29.34,
+   "window_s": 49.2,
+   "livestream_worker_percent_of_one_core": 61.1,
+   "livestream_worker_per_second_sd": 2.3,
+   "main_process_percent_of_one_core": 187.0,
+   "main_process_threads_percent_of_one_core": {
+    "frames:src": 94.4,
+    "python": 51.8,
+    "rgb_queue:src": 16.6,
+    "record_queue:sr": 12.4,
+    "vpistrm7dc99830": 4.2,
+    "multiqueue0:src": 2.6,
+    "stream_mux:src": 2.0
+   },
+   "recording": {
+    "bytes": 75398316,
+    "same_as_A3_after_first_276_bytes": true
+   }
+  },
+  {
+   "run": "A3",
+   "batch": "clocks batch",
+   "order_in_batch": 1,
+   "variant": "A: area averaging (INTER_AREA)",
+   "exit_code": 0,
+   "replay_valid": true,
+   "dropped_frames": 0,
+   "pipeline_fps": 29.28,
+   "window_s": 47.9,
+   "livestream_worker_percent_of_one_core": 80.5,
+   "livestream_worker_per_second_sd": 2.1,
+   "main_process_percent_of_one_core": 167.4,
+   "main_process_threads_percent_of_one_core": {
+    "frames:src": 82.1,
+    "python": 47.3,
+    "rgb_queue:src": 15.2,
+    "record_queue:sr": 11.8,
+    "vpistrmadc99830": 3.9,
+    "multiqueue0:src": 2.4,
+    "stream_mux:src": 1.8
+   },
+   "recording": {
+    "bytes": 75398316,
+    "same_as_A3_after_first_276_bytes": true
+   },
+   "tegrastats_window": {
+    "tegrastats_samples": 48,
+    "cpu_load_sum_percent_of_one_core": 301.438,
+    "cpu_busy_cores": 3.014,
+    "mean_cpu_clock_mhz": 1450.1,
+    "cpu_busy_x_clock_ghz": 4.398,
+    "vdd_in_w": 13.453,
+    "vdd_cpu_gpu_cv_w": 6.1,
+    "tj_c_min_max": [
+     55.218,
+     58.343
+    ]
+   }
+  },
+  {
+   "run": "B7",
+   "batch": "clocks batch",
+   "order_in_batch": 2,
+   "variant": "B: bilinear (INTER_LINEAR)",
+   "exit_code": 0,
+   "replay_valid": true,
+   "dropped_frames": 0,
+   "pipeline_fps": 29.31,
+   "window_s": 49.2,
+   "livestream_worker_percent_of_one_core": 60.7,
+   "livestream_worker_per_second_sd": 1.9,
+   "main_process_percent_of_one_core": 186.6,
+   "main_process_threads_percent_of_one_core": {
+    "frames:src": 94.0,
+    "python": 51.9,
+    "rgb_queue:src": 16.6,
+    "record_queue:sr": 12.4,
+    "vpistrmadc98f80": 4.2,
+    "multiqueue0:src": 2.6,
+    "stream_mux:src": 2.0
+   },
+   "recording": {
+    "bytes": 75398316,
+    "same_as_A3_after_first_276_bytes": true
+   },
+   "tegrastats_window": {
+    "tegrastats_samples": 48,
+    "cpu_load_sum_percent_of_one_core": 303.854,
+    "cpu_busy_cores": 3.039,
+    "mean_cpu_clock_mhz": 1246.9,
+    "cpu_busy_x_clock_ghz": 3.816,
+    "vdd_in_w": 13.206,
+    "vdd_cpu_gpu_cv_w": 5.833,
+    "tj_c_min_max": [
+     57.906,
+     59.656
+    ]
+   }
+  },
+  {
+   "run": "B8",
+   "batch": "clocks batch",
+   "order_in_batch": 3,
+   "variant": "B: bilinear (INTER_LINEAR)",
+   "exit_code": 0,
+   "replay_valid": true,
+   "dropped_frames": 0,
+   "pipeline_fps": 29.33,
+   "window_s": 49.3,
+   "livestream_worker_percent_of_one_core": 60.7,
+   "livestream_worker_per_second_sd": 2.1,
+   "main_process_percent_of_one_core": 187.7,
+   "main_process_threads_percent_of_one_core": {
+    "frames:src": 94.9,
+    "python": 52.0,
+    "rgb_queue:src": 16.2,
+    "record_queue:sr": 12.4,
+    "vpistrma1c98f80": 4.3,
+    "multiqueue0:src": 2.6,
+    "stream_mux:src": 2.0
+   },
+   "recording": {
+    "bytes": 75398316,
+    "same_as_A3_after_first_276_bytes": true
+   },
+   "tegrastats_window": {
+    "tegrastats_samples": 49,
+    "cpu_load_sum_percent_of_one_core": 304.204,
+    "cpu_busy_cores": 3.042,
+    "mean_cpu_clock_mhz": 1245.4,
+    "cpu_busy_x_clock_ghz": 3.824,
+    "vdd_in_w": 13.222,
+    "vdd_cpu_gpu_cv_w": 5.848,
+    "tj_c_min_max": [
+     58.093,
+     59.906
+    ]
+   }
+  },
+  {
+   "run": "A4",
+   "batch": "clocks batch",
+   "order_in_batch": 4,
+   "variant": "A: area averaging (INTER_AREA)",
+   "exit_code": 0,
+   "replay_valid": true,
+   "dropped_frames": 0,
+   "pipeline_fps": 29.26,
+   "window_s": 49.3,
+   "livestream_worker_percent_of_one_core": 81.4,
+   "livestream_worker_per_second_sd": 2.5,
+   "main_process_percent_of_one_core": 168.2,
+   "main_process_threads_percent_of_one_core": {
+    "frames:src": 82.6,
+    "python": 47.5,
+    "rgb_queue:src": 15.4,
+    "record_queue:sr": 11.8,
+    "vpistrm99c99830": 3.9,
+    "multiqueue0:src": 2.4,
+    "stream_mux:src": 1.8
+   },
+   "recording": {
+    "bytes": 75398344,
+    "same_as_A3_after_first_276_bytes": null,
+    "note": "28 bytes longer than A3; not compared"
+   },
+   "tegrastats_window": {
+    "tegrastats_samples": 48,
+    "cpu_load_sum_percent_of_one_core": 302.562,
+    "cpu_busy_cores": 3.026,
+    "mean_cpu_clock_mhz": 1438.1,
+    "cpu_busy_x_clock_ghz": 4.379,
+    "vdd_in_w": 13.498,
+    "vdd_cpu_gpu_cv_w": 6.125,
+    "tj_c_min_max": [
+     58.968,
+     60.437
+    ]
+   }
+  }
+ ]
+}

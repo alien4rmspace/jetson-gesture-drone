@@ -1,0 +1,338 @@
+{
+ "description": "One Nsight Systems replay of the stream (code before the bilinear change) to see where CPU goes. Exploratory: one run, no A/B.",
+ "date": "2026-11-18 (PST)",
+ "input": {
+  "clip_sha256": "e93036e39c708074d10bea26c52e7a7da05dc96c234f0e38e71cd3cd2e136800",
+  "format": "1920x1080 H.264 flight recording, replayed at 30 FPS",
+  "warmup_frames": 300,
+  "measured_frames": 1200,
+  "dropped_frames": 0,
+  "capture_s": 40.794
+ },
+ "profiler": {
+  "tool": "Nsight Systems 2025.6.3",
+  "options": "trace cuda,nvtx,osrt; CPU sampling and context switches for the process tree; Python sampling 100 Hz; capture on the replay's NVTX measurement range; no GPU metrics (needs root)",
+  "coverage": "CPU samples and scheduling events were recorded for the main process only (48 threads); NVTX and CUDA ranges also for the two worker processes. Per-process CPU for the workers comes from ps every 2 s (lifetime CPU x elapsed time, differenced over 10 s)."
+ },
+ "per_process_cores_10s_chunks": [
+  {
+   "seconds_from_start": [
+    10,
+    20
+   ],
+   "main stream process": 1.96,
+   "livestream encode worker": 0.72,
+   "TensorRT hand worker": 0.19
+  },
+  {
+   "seconds_from_start": [
+    20,
+    30
+   ],
+   "main stream process": 1.94,
+   "livestream encode worker": 0.71,
+   "TensorRT hand worker": 0.21
+  },
+  {
+   "seconds_from_start": [
+    30,
+    40
+   ],
+   "main stream process": 1.97,
+   "livestream encode worker": 0.71,
+   "TensorRT hand worker": 0.23
+  },
+  {
+   "seconds_from_start": [
+    40,
+    51
+   ],
+   "main stream process": 2.0,
+   "livestream encode worker": 0.71,
+   "TensorRT hand worker": 0.26
+  }
+ ],
+ "main_process_threads_scheduled_cores": {
+  "total": 2.003,
+  "threads": [
+   {
+    "thread_name": "frames:src",
+    "threads": 9,
+    "what": "x264 encoder threads of the 1080p recording (named after the recorder's source element; every x264 CPU sample fell in these threads)",
+    "cores": 0.74
+   },
+   {
+    "thread_name": "python",
+    "threads": 18,
+    "what": "threads without their own name: DeepStream metadata probes (pose tensor capture and decode), TensorRT and CUDA launches, OpenCV, the recorder thread (sharpness score), Python",
+    "cores": 0.689
+   },
+   {
+    "thread_name": "rgb_queue:src",
+    "threads": 2,
+    "what": "frame callback thread (RGB frame copy, CPU frame work, person lock)",
+    "cores": 0.17
+   },
+   {
+    "thread_name": "record_queue:sr",
+    "threads": 1,
+    "what": "recording queue thread",
+    "cores": 0.123
+   },
+   {
+    "thread_name": "[NSys]",
+    "threads": 1,
+    "what": "Nsight Systems",
+    "cores": 0.107
+   },
+   {
+    "thread_name": "vpistrm0dc9f100",
+    "threads": 1,
+    "what": "",
+    "cores": 0.059
+   },
+   {
+    "thread_name": "multiqueue0:src",
+    "threads": 4,
+    "what": "",
+    "cores": 0.027
+   },
+   {
+    "thread_name": "stream_mux:src",
+    "threads": 1,
+    "what": "",
+    "cores": 0.024
+   },
+   {
+    "thread_name": "NSys PySampling",
+    "threads": 1,
+    "what": "Nsight Systems Python sampler",
+    "cores": 0.016
+   },
+   {
+    "thread_name": "vpistrm0ff6d0d0",
+    "threads": 1,
+    "what": "",
+    "cores": 0.013
+   },
+   {
+    "thread_name": "cuda-EvtHandlr",
+    "threads": 1,
+    "what": "",
+    "cores": 0.009
+   },
+   {
+    "thread_name": "CUPTI worker thread",
+    "threads": 1,
+    "what": "Nsight Systems (CUPTI)",
+    "cores": 0.009
+   }
+  ]
+ },
+ "main_process_cpu_samples": {
+  "n": 61918,
+  "note": "share of samples by the module on top of the stack; the experiment log counted 61,904",
+  "modules": [
+   {
+    "code": "x264",
+    "percent_of_samples": 42.9
+   },
+   {
+    "code": "Python interpreter",
+    "percent_of_samples": 8.7
+   },
+   {
+    "code": "CUDA driver",
+    "percent_of_samples": 8.6
+   },
+   {
+    "code": "C library (memcpy etc.)",
+    "percent_of_samples": 8.4
+   },
+   {
+    "code": "Nsight injection",
+    "percent_of_samples": 7.2
+   },
+   {
+    "code": "other",
+    "percent_of_samples": 5.4
+   },
+   {
+    "code": "TensorRT",
+    "percent_of_samples": 4.9
+   },
+   {
+    "code": "Nsight CUPTI",
+    "percent_of_samples": 4.9
+   },
+   {
+    "code": "OpenCV",
+    "percent_of_samples": 4.5
+   },
+   {
+    "code": "VPI",
+    "percent_of_samples": 1.3
+   },
+   {
+    "code": "GStreamer",
+    "percent_of_samples": 1.1
+   },
+   {
+    "code": "NumPy",
+    "percent_of_samples": 1.0
+   },
+   {
+    "code": "DeepStream Python bindings",
+    "percent_of_samples": 1.0
+   }
+  ]
+ },
+ "nvtx_ranges": [
+  {
+   "range": "Frame Processing",
+   "where": "frame callback (contains RGB Frame Copy, Process CPU Frame, Update Person Lock)",
+   "n": 1200,
+   "mean_ms": 5.14,
+   "p50_ms": 4.94,
+   "p95_ms": 6.58,
+   "p99_ms": 8.5
+  },
+  {
+   "range": "RGB Frame Copy",
+   "where": "inside Frame Processing",
+   "n": 1200,
+   "mean_ms": 2.41,
+   "p50_ms": 2.31,
+   "p95_ms": 3.03,
+   "p99_ms": 3.39
+  },
+  {
+   "range": "Process CPU Frame",
+   "where": "inside Frame Processing",
+   "n": 1200,
+   "mean_ms": 1.31,
+   "p50_ms": 1.22,
+   "p95_ms": 2.08,
+   "p99_ms": 3.69
+  },
+  {
+   "range": "Update Person Lock",
+   "where": "inside Frame Processing",
+   "n": 1200,
+   "mean_ms": 0.82,
+   "p50_ms": 0.78,
+   "p95_ms": 1.08,
+   "p99_ms": 1.23
+  },
+  {
+   "range": "Pose Detector Tensor Capture",
+   "where": "metadata probe; contains Pose Detector Tensor Copy and Decode Detector Poses",
+   "n": 1200,
+   "mean_ms": 1.27,
+   "p50_ms": 1.14,
+   "p95_ms": 1.82,
+   "p99_ms": 3.79
+  },
+  {
+   "range": "Pose Detector Tensor Copy",
+   "where": "inside Pose Detector Tensor Capture",
+   "n": 1200,
+   "mean_ms": 0.42,
+   "p50_ms": 0.37,
+   "p95_ms": 0.54,
+   "p99_ms": 1.96
+  },
+  {
+   "range": "Decode Detector Poses",
+   "where": "inside Pose Detector Tensor Capture",
+   "n": 1200,
+   "mean_ms": 0.55,
+   "p50_ms": 0.49,
+   "p95_ms": 0.73,
+   "p99_ms": 1.7
+  },
+  {
+   "range": "Process Object Metadata",
+   "where": "metadata probe",
+   "n": 1200,
+   "mean_ms": 0.79,
+   "p50_ms": 0.75,
+   "p95_ms": 1.01,
+   "p99_ms": 1.17
+  },
+  {
+   "range": "Recording Sharpness Score",
+   "where": "recorder thread, every recorded frame",
+   "n": 1199,
+   "mean_ms": 4.53,
+   "p50_ms": 3.69,
+   "p95_ms": 8.98,
+   "p99_ms": 11.09
+  },
+  {
+   "range": "Livestream Frame Resize",
+   "where": "livestream encode worker process",
+   "n": 815,
+   "mean_ms": 8.65,
+   "p50_ms": 8.3,
+   "p95_ms": 12.34,
+   "p99_ms": 14.68
+  },
+  {
+   "range": "Livestream JPEG Encode",
+   "where": "livestream encode worker process",
+   "n": 815,
+   "mean_ms": 9.13,
+   "p50_ms": 8.7,
+   "p95_ms": 11.6,
+   "p99_ms": 13.46
+  },
+  {
+   "range": "Livestream Overlay Draw",
+   "where": "livestream encode worker process (serializing frame data; overlays drawn by the browser)",
+   "n": 815,
+   "mean_ms": 0.46,
+   "p50_ms": 0.43,
+   "p95_ms": 0.67,
+   "p99_ms": 1.55
+  },
+  {
+   "range": "MediaPipe Hand Inference",
+   "where": "TensorRT hand worker process; includes waits",
+   "n": 620,
+   "mean_ms": 17.43,
+   "p50_ms": 17.48,
+   "p95_ms": 24.05,
+   "p99_ms": 26.25
+  }
+ ],
+ "machine_tegrastats_during_capture": {
+  "tegrastats_samples": 41,
+  "cpu_load_sum_percent_of_one_core": 315.244,
+  "cpu_busy_cores": 3.152,
+  "mean_cpu_clock_mhz": 1631.7,
+  "cpu_busy_x_clock_ghz": 5.163,
+  "vdd_in_w": 13.646,
+  "vdd_cpu_gpu_cv_w": 6.296,
+  "tj_c_min_max": [
+   53.906,
+   57.031
+  ]
+ },
+ "same_code_without_profiler": {
+  "source": "A runs (area averaging) of the bilinear experiment: same commit on the vision path, same clip, flags and window method, no Nsight",
+  "main_process_percent_of_one_core": [
+   168.1,
+   173.3,
+   167.4,
+   168.2
+  ],
+  "livestream_worker_percent_of_one_core": [
+   82.1,
+   85.0,
+   80.5,
+   81.4
+  ],
+  "clocks_batch_tegrastats": "see bilinear-resize-ab.json runs A3 and A4"
+ }
+}

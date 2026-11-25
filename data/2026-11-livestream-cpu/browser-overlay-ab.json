@@ -1,0 +1,149 @@
+{
+ "description": "Livestream overlay drawn on the Jetson (A) against a clean JPEG plus per-frame data drawn by the browser (B). Benchmark replay, order A B B A, one fresh process per run, same frozen source copy, only a command-line flag differs.",
+ "date": "2026-11-17 (PST)",
+ "input": {
+  "clip_sha256": "56e5d61423970ccd224002eb868326f590f2ad974e5ee2be719c6a2e108a93f2",
+  "format": "1280x720 H.264, replayed at 30 FPS; the pipeline runs at 1920x1080 and the livestream worker shrinks each frame to 1280x720",
+  "warmup_frames": 1950,
+  "measured_frames": 1200
+ },
+ "work_enabled": "default profile with motion output off: pose detector, tracker with ReID, person lock, MediaPipe hands on the CPU (the default then), livestream at 20 FPS, 1080p recording. A Python client on the Jetson read /stream.mjpg?data=1 in both variants; no browser drew anything during timing.",
+ "window": "70-100 s after the viewer's first part, fixed before collection; perf averages from the worker every 2 s; /proc/stat and tegrastats every 1 s",
+ "metric_notes": {
+  "worker_overlay_step_ms_mean": "elapsed ms per livestream frame inside the encode worker, from its own timer. In this tree the timer starts before the 1080p->720p resize (area averaging), so both variants include the resize.",
+  "machine_cpu_busy_cores_proc_stat": "busy CPU time / wall time over the window, whole machine, out of 6 cores; includes the Python viewer client and tegrastats.",
+  "main_process_cores": "the stream's main process only; per-child CPU was not available in this capture.",
+  "tegrastats_window": "1 s tegrastats samples inside the window; tegrastats times are whole seconds and the monotonic-to-wall alignment is good to about 1 s. cpu_busy_x_clock_ghz = sum over cores of load x clock."
+ },
+ "idle_microbenchmarks": {
+  "frame_data_serialize_ms_median": 0.18,
+  "resize_1080p_to_720p_area_6_threads_ms": 4.5,
+  "note": "idle board, sample counts not recorded"
+ },
+ "runs": [
+  {
+   "run": "A-01",
+   "order": 1,
+   "variant": "A: overlay drawn into the JPEG on the Jetson",
+   "replay_complete": true,
+   "frame_identity_hash_match": true,
+   "pipeline_fps": 29.48,
+   "viewer_parts_per_s_in_window": 20.0,
+   "viewer_parts_total": 2139,
+   "parts_with_valid_frame_data": 0,
+   "worker_overlay_step_ms_mean": 18.856,
+   "worker_overlay_step_samples": 600,
+   "worker_jpeg_encode_ms_mean": 8.75,
+   "jpeg_kib_mean": 113.3,
+   "frame_data_bytes_mean": 0,
+   "machine_cpu_busy_cores_proc_stat": 3.87,
+   "main_process_cores": 1.913,
+   "tegrastats_window": {
+    "tegrastats_samples": 30,
+    "cpu_load_sum_percent_of_one_core": 389.133,
+    "cpu_busy_cores": 3.891,
+    "mean_cpu_clock_mhz": 1712.6,
+    "cpu_busy_x_clock_ghz": 6.669,
+    "vdd_in_w": 12.717,
+    "vdd_cpu_gpu_cv_w": 6.52,
+    "tj_c_min_max": [
+     57.75,
+     58.843
+    ]
+   }
+  },
+  {
+   "run": "B-01",
+   "order": 2,
+   "variant": "B: clean JPEG + per-frame data, drawn by the browser",
+   "replay_complete": true,
+   "frame_identity_hash_match": true,
+   "pipeline_fps": 29.47,
+   "viewer_parts_per_s_in_window": 20.0,
+   "viewer_parts_total": 2138,
+   "parts_with_valid_frame_data": 2138,
+   "worker_overlay_step_ms_mean": 8.233,
+   "worker_overlay_step_samples": 600,
+   "worker_jpeg_encode_ms_mean": 9.2,
+   "jpeg_kib_mean": 94.0,
+   "frame_data_bytes_mean": 2303.0,
+   "machine_cpu_busy_cores_proc_stat": 3.71,
+   "main_process_cores": 1.916,
+   "tegrastats_window": {
+    "tegrastats_samples": 30,
+    "cpu_load_sum_percent_of_one_core": 374.267,
+    "cpu_busy_cores": 3.743,
+    "mean_cpu_clock_mhz": 1687.0,
+    "cpu_busy_x_clock_ghz": 6.322,
+    "vdd_in_w": 12.649,
+    "vdd_cpu_gpu_cv_w": 6.463,
+    "tj_c_min_max": [
+     59.125,
+     59.781
+    ]
+   }
+  },
+  {
+   "run": "B-02",
+   "order": 3,
+   "variant": "B: clean JPEG + per-frame data, drawn by the browser",
+   "replay_complete": true,
+   "frame_identity_hash_match": true,
+   "pipeline_fps": 29.43,
+   "viewer_parts_per_s_in_window": 20.0,
+   "viewer_parts_total": 2140,
+   "parts_with_valid_frame_data": 2140,
+   "worker_overlay_step_ms_mean": 8.23,
+   "worker_overlay_step_samples": 600,
+   "worker_jpeg_encode_ms_mean": 9.15,
+   "jpeg_kib_mean": 94.0,
+   "frame_data_bytes_mean": 2315.0,
+   "machine_cpu_busy_cores_proc_stat": 3.7,
+   "main_process_cores": 1.908,
+   "tegrastats_window": {
+    "tegrastats_samples": 30,
+    "cpu_load_sum_percent_of_one_core": 371.167,
+    "cpu_busy_cores": 3.712,
+    "mean_cpu_clock_mhz": 1714.3,
+    "cpu_busy_x_clock_ghz": 6.366,
+    "vdd_in_w": 12.628,
+    "vdd_cpu_gpu_cv_w": 6.429,
+    "tj_c_min_max": [
+     59.531,
+     60.343
+    ]
+   }
+  },
+  {
+   "run": "A-02",
+   "order": 4,
+   "variant": "A: overlay drawn into the JPEG on the Jetson",
+   "replay_complete": true,
+   "frame_identity_hash_match": true,
+   "pipeline_fps": 29.44,
+   "viewer_parts_per_s_in_window": 20.0,
+   "viewer_parts_total": 2139,
+   "parts_with_valid_frame_data": 0,
+   "worker_overlay_step_ms_mean": 19.051,
+   "worker_overlay_step_samples": 600,
+   "worker_jpeg_encode_ms_mean": 8.83,
+   "jpeg_kib_mean": 113.3,
+   "frame_data_bytes_mean": 0,
+   "machine_cpu_busy_cores_proc_stat": 3.86,
+   "main_process_cores": 1.906,
+   "tegrastats_window": {
+    "tegrastats_samples": 30,
+    "cpu_load_sum_percent_of_one_core": 389.0,
+    "cpu_busy_cores": 3.89,
+    "mean_cpu_clock_mhz": 1706.2,
+    "cpu_busy_x_clock_ghz": 6.638,
+    "vdd_in_w": 12.791,
+    "vdd_cpu_gpu_cv_w": 6.574,
+    "tj_c_min_max": [
+     59.937,
+     60.437
+    ]
+   }
+  }
+ ]
+}
