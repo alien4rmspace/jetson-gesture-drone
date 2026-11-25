@@ -64,8 +64,10 @@ Whole stream with the default profile on the replay input, tegrastats every
 | Pipeline FPS | 29.1 | 29.1 |
 
 GPU load fell by about a fifth. FPS stayed the same because the replay is paced
-at the camera's 30 FPS. The CPU, at about 80%, is the tighter resource in the
-default run; the pose engine runs on the GPU, so the 4-point CPU difference is
+at the camera's 30 FPS. The CPU, at about 80%, was the tighter resource in the
+default run at the time (later changes, such as [hand tracking on
+TensorRT](hand-tracking-tensorrt.md), moved work off it); the pose engine runs on
+the GPU, so the 4-point CPU difference is
 most likely run-to-run variation. Limits: one replay per engine, the replay
 decodes a file instead of using the camera path, and clocks were not locked.
 

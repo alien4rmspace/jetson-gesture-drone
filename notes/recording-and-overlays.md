@@ -5,7 +5,8 @@ Date: 2026-11-12 (PST)
 - **Classification:** exploratory. Each configuration ran once on the same fixed
   replay input, so run-to-run variability is unknown, and drop counts are known
   to vary between runs.
-- **Status:** measured on the bench with the replay input; not flown yet.
+- **Status:** measured on the bench with the replay input. Flown since
+  2026-11-17; see [In flight](#in-flight) at the end.
 - **Question:** raising the recording from 720p to 1080p at 30 FPS, with the
   overlays drawn inside the recorder, made the recorder drop frames. If the
   recorder saves the clean frame plus a small per-frame data file, and overlays
@@ -54,8 +55,9 @@ everything, including feeding the software encoder, on a CPU already about 80%
 busy across six cores. With the drawing gone it kept up.
 
 The data file is about 3.6 KB per frame, or 6.5 MB per minute, small next to
-the 12 Mbps video (90 MB per minute). The render tool runs at 30–38 FPS on an
-idle Jetson, about real time. It runs at lower priority, one render at a time,
+the 12 Mbps video (90 MB per minute). The render tool ran at 30–38 FPS on an
+idle Jetson, about real time, at the time; later work on it is in
+[rendering](rendering.md). It runs at lower priority, one render at a time,
 and the recordings page refuses to start one while the stream is running.
 
 ## Hand results drawn on the frame they came from
@@ -105,11 +107,12 @@ The recorder and the livestream share one overlay renderer with two layers:
 Text uses bundled Noto fonts (SIL Open Font License). FreeType text is slow,
 about 0.3 ms per call, so rendered text is cached as masks; that cut the
 telemetry overlay from 27 to 9.6 ms per 720p frame. The livestream draws both
-layers by default. Recordings are clean, and the recordings page renders a
+layers by default; since 2026-11-17 the stream page draws them itself, from
+per-frame data sent with each JPEG, instead of the Jetson
+([livestream CPU](livestream-cpu.md)). Recordings are clean, and the recordings page renders a
 copy with telemetry, viewer layer only, or the earlier classic style.
 
-No images are included here yet: the only footage with the new overlays is
-indoors. Field clips will follow the next outdoor flight.
+No images are included here yet.
 
 ## Limits
 
@@ -117,11 +120,24 @@ indoors. Field clips will follow the next outdoor flight.
   (2 against 4 encoder threads) is not a meaningful difference.
 - The replay clip is 720p scaled up to 1080p, so it has less fine detail than a
   real 1080p camera frame, and x264 works harder on real detail.
-- Replay decodes a file instead of using the camera path, and nothing has been
-  flown with this recording mode yet.
+- Replay decodes a file instead of using the camera path. The flight results
+  below came later and are observational.
 - The recorder's own CPU use was not measured separately from the whole board.
 - Overlay drawing times are single offline runs.
 - Clocks were not locked and temperatures were not recorded.
 
 **Decision:** kept. Since 2026-11-12 the default profile records clean 1080p 30
 FPS video with the frame data file, and the livestream is 720p 20 FPS.
+
+## In flight
+
+Added 2026-11-24, from the stream's status lines, which count recorder drops.
+
+- **2026-11-17, outdoor flight**, recorder in its own process as described
+  above: 8 drops at startup and 18 by the end of a session of about 19 minutes.
+- **2026-11-19, five stream sessions** (three of them indoor flights): since
+  2026-11-17 the recorder takes its frames from a tee in the video pipeline
+  ([frame path note](recording-frame-path.md)). Each session dropped 1 or 2
+  frames, all at startup, and none after.
+
+Different days, places and recorder paths, so this is observational.

@@ -2,7 +2,7 @@
 
 I'm building a drone that flies by hand gesture, locks onto its pilot, and keeps them framed with its pan-tilt-zoom camera. Detection, tracking, gesture recognition, camera control and flight commands all run on board, on a Jetson Orin Nano connected to a Pixhawk 6C flight controller running ArduCopter.
 
-I wrote the software and fly the test flights. The application repository is private; this repository holds the write-ups, measurements and clips. Since May 2026 the application has grown to 261 commits and about 1,430 automated tests.
+I wrote the software and fly the test flights. The application repository is private; this repository holds the write-ups, measurements and clips. Since May 2026 the application has grown to 442 commits and about 2,370 automated tests.
 
 [What it does](#what-it-does) · [How it works](#how-it-works) · [Engineering highlights](#engineering-highlights) · [How I work](#how-i-work) · [Status](#status)
 
@@ -30,11 +30,11 @@ All clips are from flights on 2026-10-28, with the stream's overlays at the time
 </table>
 
 - **Locks onto the pilot.** It picks a person whose whole body is in view and whose eyes are both visible, then stays on that person's tracker ID. Every update is checked against the person's appearance (ReID embeddings), so the lock stays on the pilot instead of jumping to someone else.
-- **Takes gestures as flight commands.** Two closed fists enter Movement mode. Hand and arm gestures then move the drone forward, back, left, right, up and down; two open palms or crossed arms stop it. Only the locked person's gestures count, and a move only starts while both of their eyes are visible, so a person facing away can't start one.
-- **Follow mode.** Two thumbs up start follow mode. The drone flies forward or backward to keep the pilot at the distance they were when it started, while auto yaw turns to keep them centred.
+- **Takes gestures as flight commands.** Arm poses move the drone: both hands up for forward, one hand up for up or down, one arm out for left or right, and an open palm moves it back. Two closed fists enter Movement mode, where bringing the fists together or apart moves it forward or back. Two open palms or crossed arms stop it. Only the locked person's gestures move the drone (a stop counts from anyone), and a move only starts while both of their eyes are visible, so a person facing away can't start one.
+- **Follow mode.** In Movement mode, two thumbs up start follow mode. The drone flies forward or backward to keep the pilot at the distance they were when it started, while auto yaw turns to keep them centred.
 - **Keeps the pilot framed.** The tilt servo keeps the pilot vertically centred and turns against the drone's pitch like a gimbal. Auto zoom keeps the pilot at a set size in the frame, and a measured zoom-to-focus map keeps the image sharp.
-- **Voice control (work in progress).** A first version works: spoken or typed commands go to a local language model, Gemma 4 E2B ([chosen over Qwen3.5-4B](notes/text-command-model-comparison.md)), running under `llama.cpp` on the Jetson's GPU. It turns them into the same commands as gestures, its output is constrained to a JSON schema so it can only name a known command, and Piper speaks the replies. Questions about the drone itself (battery, GPS, motors, altitude, what the camera sees) are answered from live telemetry: the model only picks which readings were asked for, and code says the numbers ([note](notes/status-question-routing.md)). Gesture commands can be switched off by voice, and the stop gestures keep working while they are off ([note](notes/gesture-switch.md)). Next I'm building an iOS app that connects to Meta smart glasses, so I can talk to the drone and hear its replies through the glasses while I fly.
-- **Browser control.** A web page shows the live annotated stream, switches stream profiles, and plays back recordings. Recordings are saved clean with a per-frame data file, and the recordings page draws overlays onto a copy: a presentation style for sharing, or one with a debug telemetry layer (tracking scores, eye gate, gestures, tilt, zoom, focus, frame rates).
+- **Voice and text control (work in progress).** Spoken or typed commands go to a local language model, Gemma 4 E2B ([chosen over Qwen3.5-4B](notes/text-command-model-comparison.md)), running under `llama.cpp` on the Jetson's GPU beside the vision pipeline. It turns them into the same commands as gestures, and its output is constrained to a JSON schema so it can only name a known command. Questions about the drone itself (battery, GPS, motors, altitude, what the camera sees) are answered from live telemetry: the model only picks which readings were asked for, and code says the numbers ([note](notes/status-question-routing.md)). Gesture commands can be switched off by voice, and the stop gestures keep working while they are off ([note](notes/gesture-switch.md)). "Launch" and "land" ask for a yes first, and launch only runs in GUIDED after battery, level and position checks; neither has been flown yet. Next I'm connecting the phone app to Meta smart glasses, so I can talk to the drone and hear its replies through the glasses while I fly.
+- **Phone app and browser control.** I built a phone app with Drone, Library, Assistant and Settings screens, and the drone serves the same app as its website. It shows the live stream, with overlays the browser draws from per-frame data, switches stream profiles, takes typed or spoken commands, and plays recordings, which now start at once ([note](notes/recording-playback.md)). Recordings are saved clean with a per-frame data file, and renders draw the overlays onto a copy afterwards: a presentation style for sharing, or one with a debug telemetry layer (tracking scores, eye gate, gestures, tilt, zoom, focus, frame rates), with the camera's tilt jumps smoothed and an optional 60 fps ([note](notes/rendering.md)).
 
 **Safety.** Gesture and voice commands go through one command router. Movement is only sent while a recent Pixhawk heartbeat reports GUIDED mode and the drone is armed; switching the flight mode on the radio ends gesture control at once. Motion output can also be switched off with a stream profile.
 
@@ -45,41 +45,43 @@ Arducam 12 MP pan-tilt-zoom camera (CSI)
   -> Argus / GStreamer -> DeepStream
        YOLO26s-pose, TensorRT FP16: people + 17 body keypoints in one pass
        NvDCF tracker + ReID embeddings: persistent IDs
-  -> person lock -> gestures: body pose + MediaPipe hands (separate process)
+  -> person lock -> gestures: body pose + MediaPipe hand models on TensorRT (separate process)
   -> command router  <- voice/text: local Gemma 4 E2B (separate process; in progress)
   -> MAVLink, GUIDED only -> Pixhawk 6C / ArduCopter 4.6
   -> camera controller over I2C: tilt, zoom, focus
-  -> browser MJPEG stream, 720p 20 FPS, with overlays
-  -> clean 1080p 30 FPS recording + per-frame data file; overlays rendered afterwards
+  -> livestream: 720p 20 FPS JPEGs + per-frame data; the browser draws the overlays
+  -> clean 1080p 30 FPS recording from a YUV tee + per-frame data file; overlays rendered afterwards
 ```
 
-Work that can block or crash runs in its own process: MediaPipe, recording, the voice model and speech. A supervisor restarts the video process if frames stop arriving. The pipeline holds the camera's 30 FPS in flight.
+Work that can block or crash runs in its own process: the hand worker, the livestream JPEG encoder, the voice model and speech. The recorder is a thread fed by a tee in the video pipeline. A supervisor restarts the video process if frames stop arriving. The pipeline holds the camera's 30 FPS in flight.
 
 | Part | What it is |
 | --- | --- |
 | Computer | NVIDIA Jetson Orin Nano developer kit (8 GB) |
 | Flight controller | Pixhawk 6C, ArduCopter 4.6.3 |
 | Camera | Arducam 12MP 477P pan-tilt-zoom camera over CSI; tilt servo, zoom and focus motors share one I2C controller |
-| Software | Python, JetPack 7.2 with DeepStream 9.1 and TensorRT 10.16, GStreamer, NvDCF tracker, MediaPipe, MAVLink (pymavlink), `llama.cpp`, Piper |
+| Software | Python, JetPack 7.2 with DeepStream 9.1 and TensorRT 10.16, GStreamer, VPI, NvDCF tracker, MediaPipe (hand models on TensorRT), MAVLink (pymavlink), `llama.cpp`, Piper (optional speech) |
 
 <img width="487" height="275" alt="Parts used to build the drone" src="https://github.com/user-attachments/assets/5c6273e2-32c8-41bb-ae67-dcec354ec745" />
 
 ### Code structure
 
-The application is one Python package of about 35,000 lines, with 17,500 lines of tests, split by responsibility:
+The application is one Python package of about 46,000 lines, with 27,000 lines of tests, split by responsibility:
 
 | Package | What it owns |
 | --- | --- |
-| `apps` | Entry points: the vision stream and its supervisor, the voice, speech, recordings and MCP servers, stream settings |
-| `vision` | DeepStream pipeline, pose decoding, person tracking and lock, hand crops and the MediaPipe worker, replay input |
+| `apps` | Entry points: the vision stream (which builds the DeepStream pipeline) and its supervisor, the voice, speech, recordings and MCP servers, stream settings |
+| `vision` | Detection filters, pose decoding and gesture rules, tracking and the person lock, hand crops and the MediaPipe workers (CPU and TensorRT), frame transport, startup checks |
+| `stream` | The livestream JPEG worker, per-frame data, replay input, frame timing and runtime state |
 | `commands` | Mapping gestures to commands |
-| `flight` | MAVLink link, command router and controller, follow mode, auto yaw and heading aim, flight-mode checks, Pixhawk log download |
+| `flight` | MAVLink link, command router and controller, follow mode, auto yaw and heading aim, flight-mode checks, voice launch, the telemetry service, battery charge, Pixhawk log download |
 | `camera` | The camera controller (tilt, zoom, focus over I2C), auto tilt and stabilization, focus maps, image settings, bench calibration tools |
-| `recording` | Segmented recording in its own process, the per-frame data file, overlay styles and the render tool |
-| `web` | Browser stream and control page |
+| `recording` | Segmented recording (from a tee in the video pipeline, or in its own process), the per-frame data file, overlay styles, the render tool and its stabilization, MP4 remux |
+| `web` | The drone's website (the phone app's browser build), the stream page and its overlay drawing, the classic control page |
 | `audio` | Voice command parsing |
 | `sim` | Closed-loop tilt, yaw and follow simulations that run the drone's own controllers |
-| `analysis` | Flight log review, recording and overlay timing, stream FPS, Nsight marker analysis |
+| `analysis` | Flight log review, the battery charge curve, recording and overlay timing, stream FPS, Nsight marker analysis |
+| `io`, `mcp`, `telemetry` | ESP32 status LED, the MCP client, telemetry parsing |
 
 Settings live in YAML stream profiles: a default plus profiles for test flights, replay, bench calibration and A/B tests. A flight's configuration is a file, not a string of command-line flags.
 
@@ -90,26 +92,29 @@ Each of these started from a flight recording or a measurement, and most were ch
 ### Keeping the camera on the pilot
 
 - **Tilt that lagged, then hunted.** The image showed a tilt move a quarter to half a second after it was sent, so a faster controller kept correcting an error it had already fixed and swung back and forth. I measured the loop delay from per-frame timestamps and tilt writes, built a closed-loop simulation around the real controller, and added a Smith predictor: each frame, the controller subtracts the tilt it has commanded but the image can't show yet. That let the tilt run twice as fast without hunting; in four flights the pilot was more than 0.15 of the frame off centre in 1.3–3.4% of frames, against 5.3% before. [Camera tilt loop note](notes/camera-tilt-loop.md)
-- **A camera controller that drops commands.** In one recording the camera reacted late to a fast backward move. I wrote a bench probe and found the camera's I2C controller ignores tilt writes while the zoom or focus motor is moving. The tilt now gets the controller between zoom steps, and zoom holds while the drone pitches fast. (Built and bench-tested; not flown yet.)
+- **A camera controller that drops commands.** In one recording the camera reacted late to a fast backward move. I wrote a bench probe and found the camera's I2C controller ignores tilt writes while the zoom or focus motor is moving. The tilt now gets the controller between zoom steps, and zoom holds while the drone pitches fast. In hard indoor rocking since, the servo still fell 8–10° behind three times, for 0.1–0.2 s, when a zoom step started at a swing reversal. Replayed over 70 logged flight stretches, also holding zoom while the drone is pitched past 4° cut such stalls from 13% to 8% of zoom steps (built, not flown yet); only a tilt drive that doesn't share the lens controller would remove them.
 - **The right person, every frame.** I compared the lock's previous colour histogram with ReID embeddings on the MOT17 tracking dataset's ground truth: ReID picked the right person 96% of the time against 72%, so the lock now uses ReID. When a 0.1 s lock dropout cancelled Movement mode in flight, I traced it to the tracker keeping the pilot's ID on a weaker duplicate box, below the detector's score floor, and gave the locked ID its own lower floor.
 
 ### Flying from what the camera sees
 
 - **Follow mode that kept up.** The first follow controller reacted late and moved at one fixed speed, so a walking pilot got up to twice as far away. From the recording and the Pixhawk log I measured how the drone responds to speed commands (0.2 s delay, 0.4 s lag), put that into a follow simulation, and replaced it with a proportional controller with a speed ramp. The flights after that showed backing away is still limited by how fast it reacts, not by the ramp, so the next step is feed-forward from the pilot's own speed.
 - **Turning toward the pilot.** Turn-rate commands showed up in the image 0.6–0.8 s later, so auto yaw overshot. Auto yaw now aims at an absolute heading, worked out from the drone's heading at the moment the frame was captured, so a late frame doesn't add more turn.
-- **Tuning the airframe.** I ran ArduPilot AutoTune on yaw, roll and pitch, and wrote tools to download Pixhawk logs over MAVLink (refused while armed) and review flights for vibration, battery and control response. When the drone turned 60 degrees by itself in one flight, the log showed the heading estimate had moved against the gyros after a takeoff on a magnetically disturbed spot.
+- **Tuning the airframe.** I ran ArduPilot AutoTune on yaw, roll and pitch, and wrote tools to download Pixhawk logs over MAVLink (refused while armed) and review flights for vibration, battery and control response. When the drone turned 60 degrees by itself in one flight, the log showed the heading estimate had moved against the gyros after a takeoff on a magnetically disturbed spot. ArduPilot's battery percent counts charge used against the pack's rated capacity and assumes a full pack at every boot, so it read 72–74% at landings with the pack nearly empty. I stitched 33 flight logs into one resting-voltage curve instead; leaving each log out in turn, it predicted the charge used within 5% for 11 of 16 logs, and every battery percent the drone shows now comes from it.
 
 ### Making it fast and reliable
 
 - **One model pass instead of two.** The stream found people with a segmentation model, then ran a pose model on each person. The pose model already outputs each person's box, so I made it the only detector: **38.6 → 58.7 FPS** on a fixed replay clip, with the same people found and the lock held as well. In later flights, a frame reached the tilt decision in 35–43 ms instead of 202 ms. [Note](notes/pose-model-person-detector.md)
 - **From 8.5 to 30 FPS.** Moving YOLO inference from the CPU to a TensorRT FP16 engine took the first camera stream from 8.5 to the camera's 30 FPS limit. Later work moved detection into DeepStream and cut per-frame CPU work with Nsight Systems: RGB frames end to end, shared memory instead of JPEG for the hand worker, and one direct GPU-to-NumPy copy (callback p95 19.1 → 13.4 ms).
-- **Recording at 1080p without dropping frames.** Drawing overlays inside the recorder at 1080p 30 FPS left it short of its 33 ms frame budget, and it dropped 67 frames on the replay clip. It now records the clean frame and writes a small data file, one line per frame, with what the overlays are drawn from; overlays are rendered onto a copy afterwards, in any style. Drops fell to 2, both at startup, and renders put each hand result on the frame it came from instead of 182 ms late. (Bench-tested; not flown yet.) [Note](notes/recording-and-overlays.md)
-- **Checking what was actually deployed.** A September benchmark picked TensorRT optimization level 5 for the pose model, but the engine the stream loaded took 8.1 ms per inference, not 6.5. Rebuilt at level 5, it cut the stream's GPU load from 43% to 34% with essentially the same detections. The CPU, at about 80%, is the tighter resource. [Note](notes/tensorrt-builder-comparison.md#follow-up-2026-11-12-the-pose-engine-the-stream-was-using)
+- **Recording at 1080p without dropping frames.** Drawing overlays inside the recorder at 1080p 30 FPS left it short of its 33 ms frame budget, and it dropped 67 frames on the replay clip. It now records the clean frame and writes a small data file, one line per frame, with what the overlays are drawn from; overlays are rendered onto a copy afterwards, in any style. Drops fell to 2, both at startup, and renders put each hand result on the frame it came from instead of 182 ms late. The recorder now takes its frames from a tee in the video pipeline, and in the 2026-11-19 flights it dropped 1–2 frames per session, all at startup. [Note](notes/recording-and-overlays.md) · [Frame path](notes/recording-frame-path.md)
+- **Checking what was actually deployed.** A September benchmark picked TensorRT optimization level 5 for the pose model, but the engine the stream loaded took 8.1 ms per inference, not 6.5. Rebuilt at level 5, it cut the stream's GPU load from 43% to 34% with essentially the same detections. The CPU, at about 80% then, was the tighter resource, and that is what the next changes went after. [Note](notes/tensorrt-builder-comparison.md#follow-up-2026-11-12-the-pose-engine-the-stream-was-using)
 - **Hand gestures on the GPU.** MediaPipe ran its hand models on one CPU thread, about 36 ms per palm detection and 32 ms per landmark run, so gestures acted on hands about 150 ms old. I rebuilt MediaPipe's own models as TensorRT engines layer by layer from the TFLite files, ported the rest of its hand graph around them, and checked the port against MediaPipe on the same crops (gestures 99.7–100% equal) before making it the default. Hand lag fell from 145–172 to 67 ms on a fixed replay and was 63–67 ms in the next flights. [Note](notes/hand-tracking-tensorrt.md)
 - **Measuring before rewriting in C++.** A profile of the stream on the replay clip put about 2.9 of 6 cores in the recording's x264 encoder, the livestream worker and the hand worker, with Python bytecode at about 0.17 of a core, so a C++ rewrite had little to win at 30 FPS. Instead, the livestream now sends clean JPEGs with per-frame data that the browser draws (worker 19 → 8.2 ms per frame) and shrinks frames bilinearly, which cut the board's CPU cycles 13% and power 0.25 W while CPU percent looked flat, because the governor lowered the clocks. (In the code that flew; not yet seen working on a phone.) [Profile note](notes/where-the-cpu-goes.md) · [Livestream note](notes/livestream-cpu.md)
 - **Recordings that play at once.** The recorder writes one-second MP4 fragments, so an interrupted recording keeps every finished second, but browsers walked them one request at a time: on an emulated 40 Mbit/s link a 5-minute recording took 5.4 s to start in Chromium. Remuxing each finished recording with its index at the front, without re-encoding, cut that to 0.1 s with the same frames (not yet run after a real flight). [Note](notes/recording-playback.md)
 - **Renders twice as fast, and steadier.** Overlays are drawn onto a copy of each clean 1080p recording afterwards, so I profiled that render tool: a single-threaded colour conversion capped it at about 32 fps while the encoder alone ran at 112. Threads, saved motion and parallel pieces cut a 30 s render from 54 s to 22–33 s, and smoothing the camera's whole-degree tilt steps cut frames with a jump over 5 px from 32.5% to 6.1% on a rocking flight. I also tested driving that smoothing from the Pixhawk's gyro and dropped it, because the servo moves the camera where the flight controller's IMU cannot see it. [Note](notes/rendering.md)
 - **A crash that wasn't the model.** The video pipeline crashed at random. I matched DeepStream buffer-copy failures to kernel GPU memory faults and CUDA error 700, ruled out the TensorRT engines by rebuilding them, and stopped it by moving the affected copies to the Jetson's VIC hardware (`copy-hw=2`) on that JetPack release.
+
+### The on-board language model
+
 - **Keeping the language model out of the video path.** Loading Qwen inside the DeepStream process destabilized it, so it runs as a separate warm service. GPU offload cut one command's response from 14.3 s to 4.5 s.
 - **Picking the on-board language model.** I benchmarked Qwen3.5-4B against Gemma 4 E2B for text commands on 95 labeled sentences. First I fixed two slowdowns that had nothing to do with the models: Qwen3.5's hybrid layers cannot reuse a cached prompt, so the parser restores a saved state after the fixed instructions, and the JSON grammar was checked against all 248,320 vocabulary tokens at every step, so it now checks the top token first, which gives the same answer for greedy decoding. Gemma then answered in **1.13 s** at the median against 1.72 s, needs about **1.9 GiB** of GPU memory against 3.1 GiB, and was more accurate (95.8% against 91.6%), so it is now the default. [Note](notes/text-command-model-comparison.md)
 - **Letting the model choose the readings, not say them.** Status questions used to go to one of four "inspect" actions, then to keyword patterns. Questions between the two went wrong: "how many amps are we drawing" read out the whole RAM and CPU report, and "are you following me right now?" turned follow mode **on**. Now the model fills in a list of reading names, limited by the output grammar, and code fetches and says the numbers. On 132 labeled sentences: status questions answered exactly right **26 → 30 of 34**, unwanted follow commands **4 → 0**, median **1.18 → 1.10 s**. A follow-up field rename scored better overall but broke one question that was right before, against a rule set before the runs, so I didn't adopt it. [Note](notes/status-question-routing.md)
@@ -118,9 +123,9 @@ The [performance page](notes/performance.md) has the full measurements, Nsight t
 
 ## How I work
 
-- **Measure before changing.** The stream logs a timestamp for every frame at each pipeline stage, every tilt write, and the drone's attitude at 25 Hz, so a recording can be lined up with the Pixhawk log to within a frame or two.
+- **Measure before changing.** The stream logs a timestamp for every frame at each pipeline stage, every tilt write, and the drone's attitude at 50 Hz, so a recording can be lined up with the Pixhawk log to within a frame or two.
 - **Simulate the control loops.** The tilt, yaw and follow simulations import the controllers that run on the drone and drive them against models measured on the bench and in flight. They rank settings before a flight; they don't replace one.
-- **Bench-test the hardware.** Servo calibration (0.69 degrees of view per servo degree, 0.11 s delay), focus maps across the zoom range, and probes of the camera controller's timing.
+- **Bench-test the hardware.** Servo calibration (0.92 degrees of view per servo degree after a camera change, 0.11 s from command to image), focus maps across the zoom range, and probes of the camera controller's timing.
 - **Compare on a fixed input.** Pipeline changes are compared on the same replay clip, identified by its SHA-256 hash.
 - **Write it up honestly.** Each [note](notes/) follows a template: question, baseline, one change, a primary metric, correctness checks, and whether the comparison is controlled or only observational, with its limits.
 
@@ -128,7 +133,7 @@ The [performance page](notes/performance.md) has the full measurements, Nsight t
 
 | Working in flight | Built, not flown yet | Next |
 | --- | --- | --- |
-| Person lock with ReID, gesture commands, Movement mode, follow mode, auto tilt with the Smith predictor, 30 FPS pipeline | Tilt priority between zoom steps, zoom hold during fast pitch, clean 1080p recording with a frame data file, presentation and telemetry overlays | Voice control through an iOS app and Meta smart glasses, follow feed-forward from the pilot's speed, two-person lock tests in flight, longer-range tests |
+| Person lock with ReID, gesture commands, Movement mode, follow mode, auto tilt with the Smith predictor, tilt against the drone's pitch, tilt priority between zoom steps, zoom hold during fast pitch, hand tracking on TensorRT (AltHold flights), clean 1080p recording with a frame data file, 30 FPS pipeline | Gesture commands with the TensorRT hands, zoom hold past 4° of pitch, voice launch and land, the stricter thumbs-up check | Voice through the phone app and Meta smart glasses, follow feed-forward from the pilot's speed, two-person lock tests in flight, longer-range tests |
 
 ## Notes
 

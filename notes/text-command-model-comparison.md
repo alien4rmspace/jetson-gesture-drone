@@ -152,7 +152,11 @@ this "no regression, slightly faster", not a precise number.
   phrasings I thought of.
 - The vision stream was off. With DeepStream sharing the GPU, commands will be
   slower by an unmeasured amount, and whether each model fits beside the
-  vision pipeline has not been tested.
+  vision pipeline has not been tested. (Follow-up, 2026-11-13: Gemma now starts
+  with the stream. In one start with nobody in view, the stream held 30 FPS while
+  Gemma parsed 12 commands back to back, all correct, in 1.67 s at the median over
+  HTTP; memory peaked at 5.6 of 7.5 GB. One start, so observational; a person in
+  view was not tested.)
 - The `MemAvailable` drop measured during loading understates memory-mapped
   weights, so the memory comparison uses llama.cpp's own allocation log.
 - Speech recognition on the phone was not part of the test; transcription

@@ -72,8 +72,9 @@ from 20 deg/s with a 0.30 slow zone to 40 deg/s with a 0.10 slow zone.
 A closed-loop simulation in the application drives the real tilt controller and
 motion profile against a camera that shows each servo move after a set delay. It
 compares settings; it does not predict exact flight numbers. Servo scale is 0.69
-camera degrees per servo degree, as measured on the bench, and values are the
-worst of three noise seeds.
+camera degrees per servo degree, as measured on the bench at the time, and values
+are the worst of three noise seeds. (A fixed bench tool later re-read that servo
+as 0.82, and after a camera change in November it measures 0.92.)
 
 | Case | 20 deg/s, slow zone 0.30, no predictor | 40 deg/s, slow zone 0.10, no predictor | 40 deg/s, slow zone 0.10, predictor |
 | --- | --- | --- | --- |
@@ -115,7 +116,12 @@ came while the drone rocked −10 to +5 degrees in pitch under stick input, and
 while raised arms moved the box centre during gestures.
 
 **Decision:** kept. Since 2026-10-28 the application's default profile runs 40
-deg/s, a 0.10 slow zone and the predictor at 0.27 s.
+deg/s, a 0.10 slow zone and the predictor at 0.27 s. Since 2026-11-19 the tilt also
+turns against the drone's pitch at the re-measured servo scale of 0.92 (private
+application repository, commit `37f7f6f`). In two indoor flights with the drone
+rocked by stick to about ±25°, it cancelled the pitch with a median of 0.98 over
+14 and 16 swings, with no overshoot. Observational; the view still lags during the
+fastest pitching.
 
 ## Limits
 

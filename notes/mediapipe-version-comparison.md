@@ -62,3 +62,11 @@ comes from running the models on the CPU. A TensorRT port of MediaPipe's own
 current hand models is the likely next step. An earlier TensorRT hand backend
 (May 2026) used older 2020 model exports without world landmarks and recognised
 closed fists less reliably, so it was set aside. The port has not been started.
+
+**Follow-up, 2026-11-18.** The port is done and is now the default (private
+application repository, commits `16b5e6c` and `8af0997`): MediaPipe's own palm and
+landmark models run as FP32 TensorRT engines inside a port of its hand graph. On
+the fixed replay the median hand lag fell from 145–172 ms to 67 ms and the hand
+worker from about 92% to 19% of a core, three replays each. It ran in the
+2026-11-19 flights. The [TensorRT hand note](hand-tracking-tensorrt.md) has the
+parity checks, including one it missed, and the limits.

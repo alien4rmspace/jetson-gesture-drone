@@ -29,8 +29,9 @@ I adopted it anyway, knowingly; see "One sentence broke again".
 
 The model only classifies the sentence. Code on the stream holds one flag, on at every start.
 While it is off:
-- **Gestures that stop still work:** open palm, crossed arms and two open palms (stop follow). They
-  can only stop the drone, and an emergency stop should not depend on a setting.
+- **Gestures that stop still work:** two open palms (Stop, or Stop follow while following) and crossed
+  arms. They can only stop the drone, and an emergency stop should not depend on a setting. A single
+  open palm means Move backward, so it is ignored with the rest.
 - **Gestures that move the drone are ignored:** follow, movement, movement mode and twirl. A gesture
   movement already running is stopped on the next update, and the video overlay shows "gestures off".
 - **Follow mode is left as it is.** "Stop following" still ends it.

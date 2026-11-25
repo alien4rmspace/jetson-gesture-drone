@@ -10,7 +10,7 @@ Later changes added direct TensorRT detector execution and capped browser JPEG e
 
 The later path used Argus capture, NVMM buffers, DeepStream object detection, and a secondary pose inference engine on person boxes. Pose keypoints came from DeepStream tensor metadata instead of a separate CPU-frame pose path. A DeepStream object-only HTTP sample held 30 FPS at about 26.6% process CPU and 364 MB RSS. Adding hands, pose, and command handling increased CPU and memory; those samples should not be compared as if the workloads were identical.
 
-Moving hand landmarks to a TensorRT path removed the separate MediaPipe worker in one test, but the CPU MediaPipe worker remained preferable for closed-fist recognition quality in later operation. That choice illustrates the practical tradeoff: lower resource use was not enough if command recognition became less reliable.
+Moving hand landmarks to a TensorRT path removed the separate MediaPipe worker in one test, but the CPU MediaPipe worker remained preferable for closed-fist recognition quality in later operation. That choice illustrates the practical tradeoff: lower resource use was not enough if command recognition became less reliable. In November 2026 a second port kept MediaPipe's own current hand models and graph and only moved the models to TensorRT; it matched MediaPipe's gestures on identical crops and replaced the CPU worker ([TensorRT hand note](hand-tracking-tensorrt.md)).
 
 ## 3. Remove avoidable browser-frame work
 
@@ -32,7 +32,7 @@ That workaround is tied to the older software stack and should be retested on ot
 
 ## 6. Compare TensorRT builder levels with measured plans
 
-The September 2026 experiment built separate FP16 detector and pose plans at builder levels 3 and 5, then loaded and benchmarked each plan for 10 seconds after a one-second warm-up. Level 5 improved isolated throughput by 6.9% for pose and 8.9% for detection in those runs. The [full comparison](tensorrt-builder-comparison.md) records GPU compute time and one-time build cost. Both level 5 plans were selected for the local deployment; a full stream test remains a separate validation step.
+The September 2026 experiment built separate FP16 detector and pose plans at builder levels 3 and 5, then loaded and benchmarked each plan for 10 seconds after a one-second warm-up. Level 5 improved isolated throughput by 6.9% for pose and 8.9% for detection in those runs. The [full comparison](tensorrt-builder-comparison.md) records GPU compute time and one-time build cost. Both level 5 plans were selected for the local deployment; a full stream test remains a separate validation step. A 2026-11-12 check found that the pose engine the stream actually loaded was not the level 5 plan; it was rebuilt then ([follow-up](tensorrt-builder-comparison.md#follow-up-2026-11-12-the-pose-engine-the-stream-was-using)).
 
 ## 7. Standardize RGB and remove compressed hand-frame transfer
 
