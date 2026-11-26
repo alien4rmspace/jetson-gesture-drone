@@ -64,6 +64,49 @@ Work that can block or crash runs in its own process: the hand worker, the lives
 
 <img width="487" height="275" alt="Parts used to build the drone" src="https://github.com/user-attachments/assets/5c6273e2-32c8-41bb-ae67-dcec354ec745" />
 
+### Repository structure
+
+The application repository is private. This is how it is laid out:
+
+```text
+├── src/drone_ai/               # The application package (parts under Code structure)
+│   ├── apps/                   # Entry points: stream, supervisor, voice, recordings, MCP
+│   ├── vision/
+│   │   ├── detection/          # Detection filters, masks and crops
+│   │   ├── pose/               # Pose decoding and gesture rules
+│   │   ├── tracking/           # Tracks, ReID appearance and the person lock
+│   │   ├── hands/              # Hand crops and workers; trt/ runs MediaPipe on TensorRT
+│   │   ├── transport/          # Frame copies out of DeepStream, shared-memory RGB
+│   │   └── preflight/          # Startup checks: TensorRT plans and the tracker
+│   ├── stream/                 # Livestream worker, per-frame data, replay input
+│   ├── commands/               # Gestures to commands
+│   ├── flight/                 # MAVLink, command router, follow mode, auto yaw, telemetry
+│   ├── camera/                 # Tilt, zoom and focus over I2C, auto tilt, focus maps
+│   ├── recording/              # Recorder, per-frame data file, overlay renders
+│   ├── web/                    # Drone website; app/ is the phone app's browser build
+│   ├── audio/                  # Voice command parsing
+│   ├── sim/                    # Tilt, yaw and follow simulations
+│   ├── analysis/               # Flight log review, battery curve, timing and FPS
+│   └── io/, mcp/, telemetry/   # Status LED, MCP client, telemetry parsing
+├── native/deepstream/          # C++: YOLO26 output parsers, frame-copy bridge (pybind11)
+├── config/
+│   ├── stream_profiles/        # YAML run profiles: default, test flight, calibration, A/B
+│   ├── deepstream/             # Inference and NvDCF/ReID tracker configs, labels
+│   ├── systemd/                # Boot-time GPU firmware path workaround
+│   └── *.json                  # Airframe, ESC, gesture map, focus map, text-command cases
+├── tests/                      # pytest suite and fixtures
+├── scripts/                    # Launchers, Pixhawk bridges, motor tests, engine rebuilds
+├── bartholomew_yaw/            # Isaac Lab project that trains a yaw-follow policy
+├── docs/                       # Architecture, subsystem guides, profiling, experiments
+│   ├── teachings/              # Lessons on how the text-command parser works
+│   └── superpowers/            # Design specs and implementation plans
+├── models/                     # Model list and sources; weights and engines stay out of git
+├── logs/flight/                # Some Pixhawk flight logs (.BIN)
+├── var/                        # Runtime logs and recordings; empty in git
+├── pyproject.toml              # Package, dependencies, console scripts, pytest settings
+└── AGENTS.md                   # Instructions for coding agents
+```
+
 ### Code structure
 
 The application is one Python package of about 46,000 lines, with 27,000 lines of tests, split by responsibility:
@@ -149,19 +192,3 @@ The [performance page](notes/performance.md) has the full measurements, Nsight t
 - [Optimization case studies](notes/case-studies.md), the [May field log](notes/field-log.md) and the [later stream log](notes/recent-stream-log.md)
 
 Measurements come from one device and are often single runs; each note gives its limits. Commands in the logs show the configuration at the time and may not match the current application. Model weights, TensorRT plans, raw recordings and device configuration are not in this repository, and local account paths and LAN addresses in the logs were replaced with documentation examples.
-
-## Repository structure
-
-```text
-├── notes/                    # Write-ups, one per change or comparison, and the logs
-│   ├── performance.md        # Every measured result, with Nsight timelines
-│   ├── case-studies.md       # Optimization case studies
-│   ├── field-log.md          # May 2026 experiment log
-│   ├── recent-stream-log.md  # Stream performance and stability log, May–August 2026
-│   └── *.md                  # One note per change or comparison, listed under Notes
-├── data/                     # Measurements and test cases behind the notes, as JSON
-│   └── <date>-<topic>/       # One folder per experiment, linked from its note
-└── assets/
-    ├── clips/                # Flight clips (WebP) shown under What it does
-    └── nsight/               # Nsight Systems timelines shown in performance.md
-```
