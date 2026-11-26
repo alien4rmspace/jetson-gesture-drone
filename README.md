@@ -49,8 +49,16 @@ Arducam 12 MP pan-tilt-zoom camera (CSI)
   -> command router  <- voice/text: local Gemma 4 E2B (separate process; in progress)
   -> MAVLink, GUIDED only -> Pixhawk 6C / ArduCopter 4.6
   -> camera controller over I2C: tilt, zoom, focus
-  -> livestream: 720p 20 FPS JPEGs + per-frame data; the browser draws the overlays
+  -> livestream: 720p 20 FPS JPEGs + per-frame data; the app or browser draws the overlays
   -> clean 1080p 30 FPS recording from a YUV tee + per-frame data file; overlays rendered afterwards
+
+Phone app (iPhone) and the drone's website (the same app, browser build)
+  -> control service: serves the website and relays its requests; stream profiles,
+       start/stop, battery
+  -> stream service: live view, tilt, zoom, focus, image settings,
+       typed and spoken commands -> the same command router and gates
+  -> recordings service: playback, overlay renders, H.264 copies, download, delete
+  On the phone: speech to text with Whisper, spoken replies with Kokoro
 ```
 
 Work that can block or crash runs in its own process: the hand worker, the livestream JPEG encoder, the voice model and speech. The recorder is a thread fed by a tee in the video pipeline. A supervisor restarts the video process if frames stop arriving. The pipeline holds the camera's 30 FPS in flight.
@@ -176,7 +184,7 @@ The [performance page](notes/performance.md) has the full measurements, Nsight t
 
 | Working in flight | Built, not flown yet | Next |
 | --- | --- | --- |
-| Person lock with ReID, gesture commands, Movement mode, follow mode, auto tilt with the Smith predictor, tilt against the drone's pitch, tilt priority between zoom steps, zoom hold during fast pitch, hand tracking on TensorRT (AltHold flights), clean 1080p recording with a frame data file, 30 FPS pipeline | Gesture commands with the TensorRT hands, zoom hold past 4° of pitch, voice launch and land, the stricter thumbs-up check | Voice through the phone app and Meta smart glasses, follow feed-forward from the pilot's speed, two-person lock tests in flight, longer-range tests |
+| Person lock with ReID, gesture commands, Movement mode, follow mode, auto tilt with the Smith predictor, tilt against the drone's pitch, tilt priority between zoom steps, zoom hold during fast pitch, hand tracking on TensorRT (AltHold flights), clean 1080p recording with a frame data file, 30 FPS pipeline | Gesture commands with the TensorRT hands, zoom hold past 4° of pitch, voice launch and land, the stricter thumbs-up check, voice through the phone app (speech to text and spoken replies on the phone) | Voice through Meta smart glasses, follow feed-forward from the pilot's speed, two-person lock tests in flight, longer-range tests |
 
 ## Notes
 
