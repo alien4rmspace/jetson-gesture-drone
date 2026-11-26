@@ -149,3 +149,19 @@ The [performance page](notes/performance.md) has the full measurements, Nsight t
 - [Optimization case studies](notes/case-studies.md), the [May field log](notes/field-log.md) and the [later stream log](notes/recent-stream-log.md)
 
 Measurements come from one device and are often single runs; each note gives its limits. Commands in the logs show the configuration at the time and may not match the current application. Model weights, TensorRT plans, raw recordings and device configuration are not in this repository, and local account paths and LAN addresses in the logs were replaced with documentation examples.
+
+## Repository structure
+
+```text
+├── notes/                    # Write-ups, one per change or comparison, and the logs
+│   ├── performance.md        # Every measured result, with Nsight timelines
+│   ├── case-studies.md       # Optimization case studies
+│   ├── field-log.md          # May 2026 experiment log
+│   ├── recent-stream-log.md  # Stream performance and stability log, May–August 2026
+│   └── *.md                  # One note per change or comparison, listed under Notes
+├── data/                     # Measurements and test cases behind the notes, as JSON
+│   └── <date>-<topic>/       # One folder per experiment, linked from its note
+└── assets/
+    ├── clips/                # Flight clips (WebP) shown under What it does
+    └── nsight/               # Nsight Systems timelines shown in performance.md
+```
